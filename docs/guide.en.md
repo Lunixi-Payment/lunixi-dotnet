@@ -1,6 +1,10 @@
 # .NET / C# SDK
 
-`Lunixi.Sdk` 0.1.0 provides Ed25519 signing, token caching, hosted intents, payment operations, split DTO validation, fraud clients and raw-body webhook verification. It supports .NET 8 or newer and works with ASP.NET Core, background workers and other server applications.
+Current source release: **0.1.1**. NuGet publication requires a separate approved release; this does not assert registry availability.
+
+The source patch adds a concrete merchant-site presentation example. **Embedded checkout is the default**: load only the official Lunixi bundle and mount the existing form; methods and multi-card choices stay in the Lunixi panel. Optional hosted mode uses the backend `paymentPageUrl` after exact HTTPS `pay.lunixi.com/payment/` validation. Its token may differ from the embedded token. Missing URLs keep embedded available and hosted on hold/reconciliation with the original attempt/key. Never derive a URL from the browser token. Authorize the customer/order and native browser CSRF before rendering, send `Cache-Control: private, no-store`, preserve the merchant CSP nonce and keep tokens/HTML/redirect URLs out of logs. Generic response data preserves `paymentPageUrl`; no new typed product parity is claimed.
+
+`Lunixi.Sdk` 0.1.1 provides Ed25519 signing, token caching, checkout intents, payment operations, split DTO validation, fraud clients and raw-body webhook verification. It supports .NET 8 or newer and works with ASP.NET Core, background workers and other server applications.
 
 ## Installation
 
@@ -8,12 +12,12 @@ Source: [Lunixi-Payment/lunixi-dotnet](https://github.com/Lunixi-Payment/lunixi-
 
 ```bash
 dotnet pack src/Lunixi.Sdk/Lunixi.Sdk.csproj -c Release -o artifacts
-dotnet add /path/to/YourApp.csproj package Lunixi.Sdk --version 0.1.0 --source /absolute/path/to/sdk/artifacts
+dotnet add /path/to/YourApp.csproj package Lunixi.Sdk --version 0.1.1 --source /absolute/path/to/sdk/artifacts
 ```
 
 Keep your normal NuGet feed enabled for dependencies, or reference the SDK project directly. NSec/libsodium supplies Ed25519 with native assets for supported server runtimes. Browser/WASM is not supported. The sample and test host require the .NET 8 runtime.
 
-## Client and hosted checkout
+## Client and merchant-site checkout
 
 ```csharp
 using Lunixi;
@@ -64,7 +68,7 @@ var methods = await lunixi.Payments.ListMethodsAsync();
 
 Set `CreateIntentRequest.Preauth = true` for authorization followed by capture/void. `LunixiResponse` preserves `StatusCode`, full `Envelope`, `Data` and `RequestId`, including pagination metadata. A pending status or HTTP 202 is not proof of payment.
 
-| Surface | .NET 0.1.0 |
+| Surface | .NET 0.1.1 |
 | --- | --- |
 | Hosted intents, payment status/list/capture/refund/void/methods | `lunixi.Payments` |
 | Split create/status/list/refund and customer actions | `SplitPaymentRequest`, `lunixi.Payments` |
@@ -117,3 +121,7 @@ Catch `LunixiValidationException` (400/422), `LunixiRateLimitException` (429), `
 A timed-out or canceled write can have an unknown final outcome. Reconcile and reuse the original persisted key. Normal gateway idempotency retention is 24 hours; do not blindly resend after expiry. The sample requires reconciliation after 23 hours. Retries preserve the body/key and use a new signature nonce.
 
 Run `dotnet test tests/Lunixi.Sdk.Tests/Lunixi.Sdk.Tests.csproj -c Release`. Tests use offline HTTP handlers, Node.js signing/canonical-JSON fixtures, shared webhook vectors, a real ASP.NET Core TestServer and persistent SQLite. They do not make live charges. → [Testing](/getting-started/testing), [Error handling](/getting-started/errors)
+
+## Merchant-page integration example
+
+The runnable ASP.NET Core sample now exposes authenticated `POST /checkout/{orderId}/form` for embedded HTML by default; `?mode=hosted` uses the validated backend URL. The existing `/checkout/{orderId}` JSON contract is retained. `Lunixi.AspNetCoreSample.CheckoutPresentation` contains the renderer and URL validator. `DEMO_API_TOKEN` remains strictly server-to-server: never send it to browser JavaScript. Your merchant checkout controller must authenticate the customer, verify order ownership and native CSRF before proxying/rendering this response. This sample does not implement customer login or a production tenant authorization model.

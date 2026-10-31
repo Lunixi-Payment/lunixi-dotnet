@@ -7,17 +7,21 @@
 
 # Lunixi .NET SDK
 
-Server-side Lunixi integration for .NET 8 or newer: Ed25519 authentication, hosted payment intents, payment operations, split-payment DTOs, fraud and signed webhooks. Works with ASP.NET Core, worker services and other .NET applications. Version **0.1.0**, MIT licensed.
+Current source release: **0.1.1**. NuGet publication requires a separate approved release; this does not assert registry availability.
+
+The source patch adds a concrete merchant-site presentation example. **Embedded checkout is the default**: load only the official Lunixi bundle and mount the existing form; methods and multi-card choices stay in the Lunixi panel. Optional hosted mode uses the backend `paymentPageUrl` after exact HTTPS `pay.lunixi.com/payment/` validation. Its token may differ from the embedded token. Missing URLs keep embedded available and hosted on hold/reconciliation with the original attempt/key. Never derive a URL from the browser token. Authorize the customer/order and native browser CSRF before rendering, send `Cache-Control: private, no-store`, preserve the merchant CSP nonce and keep tokens/HTML/redirect URLs out of logs. Generic response data preserves `paymentPageUrl`; no new typed product parity is claimed.
+
+Server-side Lunixi integration for .NET 8 or newer: Ed25519 authentication, checkout-form intents, payment operations, split-payment DTOs, fraud and signed webhooks. Works with ASP.NET Core, worker services and other .NET applications. Version **0.1.1**, MIT licensed.
 
 [Türkçe kullanım kılavuzu](docs/guide.tr.md) · [Documentation](https://docs.lunixi.com/en/sdks/dotnet) · [Lunixi](https://lunixi.com)
 
 ## Installation
 
-This repository contains buildable source and produces a `Lunixi.Sdk.0.1.0.nupkg` artifact. **NuGet.org publication is a separate release step; this README does not assert that the package is already available there.** From this source checkout:
+This repository contains buildable source and produces a `Lunixi.Sdk.0.1.1.nupkg` artifact. **NuGet.org publication is a separate release step; this README does not assert that the package is already available there.** From this source checkout:
 
 ```bash
 dotnet pack src/Lunixi.Sdk/Lunixi.Sdk.csproj -c Release -o artifacts
-dotnet add /path/to/YourApp.csproj package Lunixi.Sdk --version 0.1.0 --source /absolute/path/to/this/repo/artifacts
+dotnet add /path/to/YourApp.csproj package Lunixi.Sdk --version 0.1.1 --source /absolute/path/to/this/repo/artifacts
 ```
 
 Alternatively reference `src/Lunixi.Sdk/Lunixi.Sdk.csproj` directly. Restore the generated package's dependencies from your normal NuGet feed. [NSec.Cryptography 25.4.0](https://www.nuget.org/packages/NSec.Cryptography/25.4.0) supplies Ed25519 via libsodium and supports .NET 8; compatible native runtime assets must be present when deploying. Browser/WASM is not supported.
@@ -48,7 +52,7 @@ The merchant API key determines TEST/LIVE. Register the public Ed25519 key in th
 
 The client sends signed **bodyless** token requests, caches tokens with a 30-second safety margin, and refreshes once after HTTP 401. Redirects are never followed. Requests cannot leave the configured origin. Supply a custom trusted `HttpMessageHandler` for instrumentation or tests; SDK validation rejects known handlers with automatic redirects enabled.
 
-## Hosted checkout
+## Checkout: embedded by default, optional hosted mode
 
 ```csharp
 var request = new CreateIntentRequest(10050, "TRY", "ORDER-1001")
@@ -83,7 +87,7 @@ Split APIs: `CreateSplitAsync`, `GetSplitAsync`, `ListSplitsAsync`, `RefundSplit
 
 ## Coverage and explicit transport
 
-| Surface | .NET 0.1.0 |
+| Surface | .NET 0.1.1 |
 | --- | --- |
 | Hosted intents, payment status/list, capture/refund/void, methods | Typed clients |
 | Split creation/status/list/refund and payment actions | Validated JSON DTO and typed client methods; rollout dependent |
@@ -140,3 +144,7 @@ dotnet pack src/Lunixi.Sdk/Lunixi.Sdk.csproj -c Release --no-restore -o artifact
 Tests use offline HTTP handlers, a Node.js Ed25519/JSON.stringify fixture, existing cross-SDK webhook vectors, and a real ASP.NET Core TestServer + SQLite database. CI runs on Linux, Windows and macOS. No live charge is made by the test suite.
 
 [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [MIT license](LICENSE)
+
+## Merchant-page integration example
+
+The runnable ASP.NET Core sample now exposes authenticated `POST /checkout/{orderId}/form` for embedded HTML by default; `?mode=hosted` uses the validated backend URL. The existing `/checkout/{orderId}` JSON contract is retained. `Lunixi.AspNetCoreSample.CheckoutPresentation` contains the renderer and URL validator. `DEMO_API_TOKEN` remains strictly server-to-server: never send it to browser JavaScript. Your merchant checkout controller must authenticate the customer, verify order ownership and native CSRF before proxying/rendering this response. This sample does not implement customer login or a production tenant authorization model.

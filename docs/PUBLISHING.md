@@ -22,3 +22,5 @@ Verify the exact 0.1.0 version in NuGet after package validation/indexing comple
 
 - [NuGet Trusted Publishing](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing)
 - [Official NuGet login action](https://github.com/NuGet/login)
+
+The current source checkout is0.1.1 and adds merchant-page rendering in the ASP.NET Core sample. The reviewed manual workflow above is still pinned to immutable0.1.0; it must not be represented as publishing0.1.1. A maintainer must prepare/review the new immutable source pin and package identity before any later registry-policy authorization or publication.

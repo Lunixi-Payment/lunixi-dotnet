@@ -1,6 +1,10 @@
 # .NET / C# SDK
 
-`Lunixi.Sdk` 0.1.0; Ed25519 imza, token önbelleği, ödeme formu intent'i, ödeme işlemleri, parçalı ödeme DTO doğrulaması, fraud istemcileri ve ham gövdeden webhook doğrulaması sağlar. .NET 8 ve üzerindeki ASP.NET Core, arka plan servisi ve diğer sunucu uygulamalarını destekler.
+Güncel kaynak sürümü: **0.1.1**. NuGet yayını ayrı onaylı yayın adımıdır; kayıt deposunda yayımlandığı iddia edilmez.
+
+Yeni kaynak yaması mağaza sitesi için somut bir sunum örneği ekler. **Varsayılan gömülü ödemedir**: yalnız resmi Lunixi bundle yüklenir ve mevcut form mount edilir; yöntem ve çoklu kart seçenekleri Lunixi panelinde kalır. İsteğe bağlı yönlendirme yalnız backend `paymentPageUrl` adresini, tam HTTPS `pay.lunixi.com/payment/` doğrulamasından sonra kullanır. Adresin token’ı gömülü token’dan farklı olabilir. Eksik adres gömülü ödemeyi engellemez; yönlendirme aynı deneme/anahtarla inceleme veya uzlaştırmada kalır. Tarayıcı token’ından adres üretmeyin. Formdan önce müşteri/sipariş sahipliğini ve yerel tarayıcı CSRF’yi doğrulayın; `Cache-Control: private, no-store` gönderin, mağazanın CSP nonce değerini koruyun; token, HTML ve yönlendirme adreslerini loglamayın. Genel yanıt verisi `paymentPageUrl` alanını korur; yeni tipli ürün eşitliği iddiası yoktur.
+
+`Lunixi.Sdk` 0.1.1; Ed25519 imza, token önbelleği, ödeme formu intent'i, ödeme işlemleri, parçalı ödeme DTO doğrulaması, fraud istemcileri ve ham gövdeden webhook doğrulaması sağlar. .NET 8 ve üzerindeki ASP.NET Core, arka plan servisi ve diğer sunucu uygulamalarını destekler.
 
 ## Kurulum
 
@@ -8,7 +12,7 @@ Kaynak: [Lunixi-Payment/lunixi-dotnet](https://github.com/Lunixi-Payment/lunixi-
 
 ```bash
 dotnet pack src/Lunixi.Sdk/Lunixi.Sdk.csproj -c Release -o artifacts
-dotnet add /path/to/YourApp.csproj package Lunixi.Sdk --version 0.1.0 --source /absolute/path/to/sdk/artifacts
+dotnet add /path/to/YourApp.csproj package Lunixi.Sdk --version 0.1.1 --source /absolute/path/to/sdk/artifacts
 ```
 
 Bağımlılıklar için normal NuGet kaynağınızı açık tutun veya SDK projesini doğrudan referans ekleyin. Ed25519, NSec/libsodium ve sunucu ortamına uygun yerel kitaplıklarla çalışır. Tarayıcı/WASM desteklenmez. Örnek ve test sunucusu .NET 8 çalışma zamanını kullanır.
@@ -64,7 +68,7 @@ var methods = await lunixi.Payments.ListMethodsAsync();
 
 Ön provizyon için `CreateIntentRequest.Preauth = true` kullanın; sonra capture/void çağırın. `LunixiResponse`, `StatusCode`, tam `Envelope`, `Data` ve `RequestId` değerlerini; sayfalama bilgisi dahil korur. Bekleyen durum veya HTTP 202 kesin ödeme başarısı değildir.
 
-| Yüzey | .NET 0.1.0 |
+| Yüzey | .NET 0.1.1 |
 | --- | --- |
 | Form intent'i, ödeme durum/liste/capture/refund/void/yöntemler | `lunixi.Payments` |
 | Parçalı ödeme oluşturma/durum/liste/iade ve alıcı aksiyonları | `SplitPaymentRequest`, `lunixi.Payments` |
@@ -117,3 +121,7 @@ Dağıtımda HTTPS kullanın. Örnek backend token'ını gerçek sipariş yetkil
 Zaman aşımı veya iptal, yazmanın sonucunu belirsiz bırakabilir. Durumu uzlaştırın; kaydedilmiş ilk anahtarı kullanın. Normal gateway idempotency süresi 24 saattir; süre bitince körlemesine tekrar göndermeyin. Örnek 23 saatten sonra mutabakat ister. Tekrarlar aynı gövde/anahtarı ve yeni imza nonce'unu kullanır.
 
 `dotnet test tests/Lunixi.Sdk.Tests/Lunixi.Sdk.Tests.csproj -c Release` çalıştırın. Çevrimdışı HTTP, Node.js imza/kanonik JSON vektörü, ortak webhook vektörleri, gerçek ASP.NET Core TestServer ve kalıcı SQLite testleri vardır; canlı ödeme yapılmaz. → [Test](/getting-started/testing), [Hata yönetimi](/getting-started/errors)
+
+## Mağaza içi entegrasyon örneği
+
+Çalışan ASP.NET Core örneğinde yetkili `POST /checkout/{orderId}/form` varsayılan olarak gömülü HTML üretir; `?mode=hosted` doğrulanmış backend adresini kullanır. Mevcut `/checkout/{orderId}` JSON sözleşmesi korunur. Renderer ve adres doğrulayıcısı `Lunixi.AspNetCoreSample.CheckoutPresentation` içindedir. `DEMO_API_TOKEN` yalnız sunucudan sunucuya kullanılır; tarayıcı JavaScript’ine vermeyin. Mağaza checkout controller’ı bu yanıtı sunmadan önce müşteri oturumunu, sipariş sahipliğini ve yerel CSRF’yi doğrulamalıdır. Örnek müşteri girişi veya üretim tenant yetkilendirmesi uygulamaz.

@@ -119,7 +119,7 @@ public sealed class LunixiClient : IDisposable
     {
         var request = new HttpRequestMessage(method, uri);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        request.Headers.UserAgent.ParseAdd("Lunixi.Sdk/0.1.0");
+        request.Headers.UserAgent.ParseAdd("Lunixi.Sdk/0.1.1");
         if (body is not null)
         {
             request.Content = new ByteArrayContent(body);

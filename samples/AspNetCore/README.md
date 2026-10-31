@@ -1,5 +1,9 @@
 # ASP.NET Core integration
 
+Current source release: **0.1.1**. NuGet publication requires a separate approved release; this does not assert registry availability.
+
+The source patch adds a concrete merchant-site presentation example. **Embedded checkout is the default**: load only the official Lunixi bundle and mount the existing form; methods and multi-card choices stay in the Lunixi panel. Optional hosted mode uses the backend `paymentPageUrl` after exact HTTPS `pay.lunixi.com/payment/` validation. Its token may differ from the embedded token. Missing URLs keep embedded available and hosted on hold/reconciliation with the original attempt/key. Never derive a URL from the browser token. Authorize the customer/order and native browser CSRF before rendering, send `Cache-Control: private, no-store`, preserve the merchant CSP nonce and keep tokens/HTML/redirect URLs out of logs. Generic response data preserves `paymentPageUrl`; no new typed product parity is claimed.
+
 This runnable .NET 8 example demonstrates server-side hosted-intent creation and a durable raw-body webhook receiver. The SDK supplies signing/authentication; this application supplies its order database, checkout-attempt keys and atomic event deduplication.
 
 ## Run
@@ -37,3 +41,7 @@ Call `POST /checkout/DEMO-1001` with `Authorization: Bearer <DEMO_API_TOKEN>` fr
 - SQLite is suitable for this executable single-store demonstration. For distributed production workers use your transactional order database and suitable locking/isolation. Do not deploy the database on ephemeral storage.
 
 Offline TestServer tests exercise authentication, original attempt-key reuse, server pricing, untrusted browser return, amount mismatch, valid/duplicate/conflicting deliveries and durable database state. Tests make no gateway calls.
+
+## Merchant-page integration example
+
+The runnable ASP.NET Core sample now exposes authenticated `POST /checkout/{orderId}/form` for embedded HTML by default; `?mode=hosted` uses the validated backend URL. The existing `/checkout/{orderId}` JSON contract is retained. `Lunixi.AspNetCoreSample.CheckoutPresentation` contains the renderer and URL validator. `DEMO_API_TOKEN` remains strictly server-to-server: never send it to browser JavaScript. Your merchant checkout controller must authenticate the customer, verify order ownership and native CSRF before proxying/rendering this response. This sample does not implement customer login or a production tenant authorization model.

@@ -28,10 +28,14 @@ namespace Lunixi.AspNetCoreSample
             _ = app.Services.GetRequiredService<SampleSettings>();
             app.Services.GetRequiredService<SampleStore>().Initialize();
             app.MapGet("/health", () => Results.Ok(new { status = "ready" }));
-            app.MapPost("/checkout/{orderId}", async (string orderId, HttpContext context, SampleSettings settings, SampleStore store, LunixiClient client) =>
+            app.MapPost("/checkout/{orderId}/{presentation?}", async (string orderId, string? presentation, HttpContext context, SampleSettings settings, SampleStore store, LunixiClient client) =>
             {
                 if (!Authorized(context, settings.ApiToken)) return Results.Unauthorized();
                 context.Response.Headers.CacheControl = "no-store";
+                context.Response.Headers["Referrer-Policy"] = "no-referrer";
+                if (presentation is not (null or "form")) return Results.NotFound();
+                var mode = context.Request.Query["mode"].ToString();
+                if (presentation == "form" && mode is not ("" or "embedded" or "hosted")) return Results.BadRequest(new { code = "invalid_checkout_mode" });
                 // This authenticated backend endpoint accepts an order reference only. Price comes from our database.
                 var order = store.GetOrCreateAttempt(orderId);
                 if (order is null) return Results.NotFound();
@@ -52,12 +56,19 @@ namespace Lunixi.AspNetCoreSample
                         result.Data.TryGetProperty("intentId", out _) && SampleStore.Text(result.Data, "intentId") != id)
                         return Results.Json(new { code = "invalid_gateway_response" }, statusCode: 502);
                     store.BindPayment(orderId, id!);
-                    // The hosted form token is sent only to the authenticated checkout consumer, never logs or a URL query.
+                    if (presentation == "form")
+                    {
+                        if (mode == "hosted") return Results.Redirect(CheckoutPresentation.HostedUrl(SampleStore.Text(result.Data, "paymentPageUrl")));
+                        var nonce = Convert.ToBase64String(RandomNumberGenerator.GetBytes(24));
+                        return Results.Content(CheckoutPresentation.EmbeddedHtml(token, nonce), "text/html; charset=utf-8");
+                    }
+                    // Preserve the server-to-server JSON contract; browsers never receive the backend API token.
                     return Results.Json(result.Envelope, statusCode: result.StatusCode);
                 }
                 catch (LunixiApiException error) { return Results.Json(new { code = error.Code, requestId = error.RequestId }, statusCode: error.StatusCode); }
                 catch (LunixiTransportException) { return Results.Json(new { code = "outcome_unknown_reuse_original_attempt" }, statusCode: 503); }
                 catch (SampleReconciliationException) { return Results.Json(new { code = "reconciliation_required" }, statusCode: 503); }
+                catch (SamplePresentationException) { return Results.Json(new { code = "checkout_presentation_requires_reconciliation" }, statusCode: 502); }
             });
             app.MapGet("/orders/{orderId}", (string orderId, HttpContext context, SampleSettings settings, SampleStore store) =>
             {

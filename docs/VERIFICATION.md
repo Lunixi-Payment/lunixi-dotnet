@@ -29,3 +29,7 @@ The suite uses synthetic keys and fixtures. No live charge, capture, refund or v
 ## Pre-publication review correction
 
 The initial sample incorrectly expected create-intent `intentId` and trusted signed event settlement fields without an authenticated status read. Review corrected it to the actual `paymentId` + `token` response, rejects conflicting aliases/missing tokens, and requires `LUNIXI_MERCHANT_ID`. Twenty-five additional regressions cover the actual event `data.intentId`, unknown payment lookup, merchant/order/payment/currency/amount mismatches, missing or fractional balances, declined/pending/partial states, stale reads after refund, held authorization, string minor-unit balances and missing merchant configuration. All 67 tests above were rerun after the correction.
+
+## 0.1.1 merchant-page presentation patch
+
+The new ASP.NET Core form route and presentation helpers passed12targeted native TestServer/URL/HTML tests on.NET8, with no skips; formatting/build/pack passed. Tests cover authenticated default embedded HTML, backend-only optional redirect with an independent token, missing/unsafe URL rejection, no-store, same attempt key and invalid mode rejection before a financial request. The existing67-test baseline above is retained; the full base suite was not repeated for this example-only patch. The backend API token is not customer login; merchant ownership and native browser CSRF remain caller responsibilities. No live/full-store acceptance or registry publication is claimed.
