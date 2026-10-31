@@ -1,35 +1,9 @@
 # Contributing
 
-Thank you for helping improve Lunixi .NET SDK.
+This public repository is published from Lunixi's integration source. Report bugs or suggest changes here; maintainers apply accepted patches in the source repository and credit contributions in the changelog.
 
-## How this repository works
+Use synthetic fixtures and a .NET 8 SDK. Run the build, tests, formatting and vulnerability commands in [README.md](README.md) before proposing a patch. Changes to financial DTOs, signing, retries or webhook handling need meaningful regression coverage against the documented public gateway contract. Do not invent routes or simulate successful payments.
 
-This repository is published from Lunixi's internal source repository. Each
-release arrives here as a single `Release x.y.z` commit with a `vx.y.z` tag, so
-pull requests cannot be merged here directly.
+Include the SDK/runtime version and a sanitized `RequestId` with bug reports. Never paste credentials, tokens, card data or buyer details. Report vulnerabilities privately using [SECURITY.md](SECURITY.md).
 
-- **Bugs and requests:** open an [issue](https://github.com/Lunixi-Payment/lunixi-dotnet/issues/new/choose).
-  This is the fastest way to get a fix.
-- **Code suggestions:** you are welcome to open a pull request to show the
-  change. We apply it in the source repository, credit you in the changelog and
-  close the pull request when the release that contains it is published.
-
-## Running it locally
-
-```bash
-dotnet restore
-dotnet test
-dotnet pack src/Lunixi.Sdk -c Release
-```
-
-## Before you open an issue
-
-- Check that you are on the latest release.
-- Include the Lunixi `requestId` from the error if you have one; it lets us
-  find the request on our side.
-- Never paste API keys, private keys, webhook secrets, tokens or customer data.
-  For security problems follow [SECURITY.md](SECURITY.md) instead.
-
-## Documentation
-
-Integration guides are at https://docs.lunixi.com/sdks/dotnet.
+Documentation must explain financial outcome, required scopes, stable idempotency keys and webhook authority in clear English and Turkish. Preserve Lunixi's original logo and server-side credential boundary.

@@ -1,0 +1,89 @@
+name: Publish Lunixi.Sdk 0.1.0 with NuGet OIDC
+
+on:
+  workflow_dispatch:
+    inputs:
+      nuget_user:
+        description: Existing confirmed NuGet profile username that creates the policy (not email)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nuget-lunixi-sdk-0.1.0
+  cancel-in-progress: false
+
+jobs:
+  pack:
+    if: github.ref == 'refs/heads/main' && github.repository == 'Lunixi-Payment/lunixi-dotnet'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ff3951f0d77d93acb71ab56f8dc947b0e7a8ac54 # reviewed immutable v0.1.0 source
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 8.0.x
+      - name: Pack reviewed release source
+        run: |
+          dotnet restore src/Lunixi.Sdk/Lunixi.Sdk.csproj --locked-mode
+          dotnet pack src/Lunixi.Sdk/Lunixi.Sdk.csproj -c Release --no-restore -o package -p:ContinuousIntegrationBuild=true -p:RepositoryCommit=ff3951f0d77d93acb71ab56f8dc947b0e7a8ac54
+          (cd package && sha256sum Lunixi.Sdk.0.1.0.nupkg > SHA256SUMS)
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: lunixi-sdk-0.1.0-nuget
+          path: |
+            package/Lunixi.Sdk.0.1.0.nupkg
+            package/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: pack
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository == 'Lunixi-Payment/lunixi-dotnet'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      # NuGet >=7.6 / SDK >=10.0.300 reads NUGET_API_KEY from the step environment.
+      # This avoids persisting a key in configuration or passing it in CLI arguments.
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.403
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: lunixi-sdk-0.1.0-nuget
+          path: package
+      - name: Verify exact package and manifest without executing artifacts
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, re, xml.etree.ElementTree as ET, zipfile
+          directory = Path('package')
+          assert sorted(p.name for p in directory.iterdir()) == ['Lunixi.Sdk.0.1.0.nupkg', 'SHA256SUMS']
+          package = directory / 'Lunixi.Sdk.0.1.0.nupkg'
+          checksum = (directory / 'SHA256SUMS').read_text()
+          assert re.fullmatch(r'[0-9a-f]{64}  Lunixi[.]Sdk[.]0[.]1[.]0[.]nupkg\n', checksum)
+          assert hashlib.sha256(package.read_bytes()).hexdigest() == checksum.split()[0]
+          with zipfile.ZipFile(package) as archive:
+              nuspecs = [n for n in archive.namelist() if n.endswith('.nuspec')]
+              assert len(nuspecs) == 1
+              manifest = ET.fromstring(archive.read(nuspecs[0]))
+              namespace = {'n': manifest.tag.partition('}')[0].lstrip('{')}
+              metadata = manifest.find('n:metadata', namespace)
+              assert metadata.findtext('n:id', namespaces=namespace) == 'Lunixi.Sdk'
+              assert metadata.findtext('n:version', namespaces=namespace) == '0.1.0'
+          PY
+      - name: Exchange GitHub OIDC identity for a masked short-lived NuGet key
+        id: nuget
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # resolved official v1
+        with:
+          user: ${{ inputs.nuget_user }}
+      - name: Publish exactly Lunixi.Sdk 0.1.0
+        env:
+          NUGET_API_KEY: ${{ steps.nuget.outputs.NUGET_API_KEY }}
+        run: dotnet nuget push package/Lunixi.Sdk.0.1.0.nupkg --source https://api.nuget.org/v3/index.json --no-symbols --timeout 120
