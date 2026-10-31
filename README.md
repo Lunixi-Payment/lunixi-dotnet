@@ -7,9 +7,9 @@
 
 # Lunixi .NET SDK
 
-Current source release: **0.1.1**. NuGet publication requires a separate approved release; this does not assert registry availability.
+**[Lunixi.Sdk 0.1.1 is published on NuGet](https://www.nuget.org/packages/Lunixi.Sdk/0.1.1)**. The downloaded public package, source commit and NuGet catalog SHA-512 were verified on 31 October 2026.
 
-The source patch adds a concrete merchant-site presentation example. **Embedded checkout is the default**: load only the official Lunixi bundle and mount the existing form; methods and multi-card choices stay in the Lunixi panel. Optional hosted mode uses the backend `paymentPageUrl` after exact HTTPS `pay.lunixi.com/payment/` validation. Its token may differ from the embedded token. Missing URLs keep embedded available and hosted on hold/reconciliation with the original attempt/key. Never derive a URL from the browser token. Authorize the customer/order and native browser CSRF before rendering, send `Cache-Control: private, no-store`, preserve the merchant CSP nonce and keep tokens/HTML/redirect URLs out of logs. Generic response data preserves `paymentPageUrl`; no new typed product parity is claimed.
+Version 0.1.1 includes a concrete merchant-site presentation example. **Embedded checkout is the default**: load only the official Lunixi bundle and mount the existing form; methods and multi-card choices stay in the Lunixi panel. Optional hosted mode uses the backend `paymentPageUrl` after exact HTTPS `pay.lunixi.com/payment/` validation. Its token may differ from the embedded token. Missing URLs keep embedded available and hosted on hold/reconciliation with the original attempt/key. Never derive a URL from the browser token. Authorize the customer/order and native browser CSRF before rendering, send `Cache-Control: private, no-store`, preserve the merchant CSP nonce and keep tokens/HTML/redirect URLs out of logs. Generic response data preserves `paymentPageUrl`; no new typed product parity is claimed.
 
 Server-side Lunixi integration for .NET 8 or newer: Ed25519 authentication, checkout-form intents, payment operations, split-payment DTOs, fraud and signed webhooks. Works with ASP.NET Core, worker services and other .NET applications. Version **0.1.1**, MIT licensed.
 
@@ -17,7 +17,13 @@ Server-side Lunixi integration for .NET 8 or newer: Ed25519 authentication, chec
 
 ## Installation
 
-This repository contains buildable source and produces a `Lunixi.Sdk.0.1.1.nupkg` artifact. **NuGet.org publication is a separate release step; this README does not assert that the package is already available there.** From this source checkout:
+Install the exact published package from NuGet in your application:
+
+```bash
+dotnet add package Lunixi.Sdk --version 0.1.1 --source https://api.nuget.org/v3/index.json
+```
+
+For source development or a local package build, this repository also produces `Lunixi.Sdk.0.1.1.nupkg`:
 
 ```bash
 dotnet pack src/Lunixi.Sdk/Lunixi.Sdk.csproj -c Release -o artifacts
