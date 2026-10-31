@@ -1,0 +1,10 @@
+{
+  "producer": "Node.js crypto + JSON.stringify; synthetic key",
+  "privateKeyPem": "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIAcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH\n-----END PRIVATE KEY-----\n",
+  "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA6kpsY+KcUgq+9VB7Ey7F+ZVHdq6+vnuSQh7qaRRG0iw=\n-----END PUBLIC KEY-----\n",
+  "input": "{\"z\":\"Ş/🚀\\u2028\\u2029\",\"10\":\"ten\",\"2\":\"two\",\"01\":\"literal\",\"0\":\"zero\",\"n\":[-0,1e-7,0.000001,333333333.33333329,9007199254740991],\"nested\":{\"4294967295\":\"last\",\"4294967294\":\"first\",\"a\":true}}",
+  "json": "{\"0\":\"zero\",\"2\":\"two\",\"10\":\"ten\",\"z\":\"Ş/🚀  \",\"01\":\"literal\",\"n\":[0,1e-7,0.000001,333333333.3333333,9007199254740991],\"nested\":{\"4294967294\":\"first\",\"4294967295\":\"last\",\"a\":true}}",
+  "digest": "SHA-256=KHPW6vKzIZfJWsTMj2h4Dt+R7h4sPYTFsj/vTcYg3e4=",
+  "canonical": "POST\n/api/v1/payments/intents?locale=tr\nX-Date:2026-10-31T08:00:00Z\nX-Nonce:synthetic-fixture\nDigest:SHA-256=KHPW6vKzIZfJWsTMj2h4Dt+R7h4sPYTFsj/vTcYg3e4=",
+  "signature": "FvC/jX/bV96BMYY7c3qnklRueZ9amkA3z1bWuHOlMeT8PU4ajgijAaDiafRJag7ILYKAbtLAFEvogUmACZLDCQ=="
+}

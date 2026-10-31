@@ -1,0 +1,11 @@
+# Changelog
+
+## 0.1.0 — 2026-10-31
+
+- Initial .NET 8 SDK with Ed25519 PKCS#8 signing, gateway-compatible compact JSON, token caching and origin-constrained HTTP transport.
+- Validated hosted intents, payment status/list/capture/refund/void/methods, split DTOs/actions and fraud clients.
+- Raw-body v2 webhook verification, rotated signatures, timestamp and envelope binding, durable replay-store interface.
+- ASP.NET Core example with actual paymentId/token response binding, configured merchant validation, authenticated status reconciliation, complete capture/refund balance checks, SQLite attempt persistence and atomic webhook-inbox/order commits.
+- Offline cryptographic, transport, validation and host integration tests; NuGet packaging and CI.
+
+This source version does not claim NuGet.org availability or activation of gateway features whose deployment is pending.

@@ -1,0 +1,28 @@
+name: Build, test and audit
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet restore tests/Lunixi.Sdk.Tests/Lunixi.Sdk.Tests.csproj --locked-mode
+      - run: dotnet build tests/Lunixi.Sdk.Tests/Lunixi.Sdk.Tests.csproj -c Release --no-restore
+      - run: dotnet test tests/Lunixi.Sdk.Tests/Lunixi.Sdk.Tests.csproj -c Release --no-build
+      - run: dotnet format tests/Lunixi.Sdk.Tests/Lunixi.Sdk.Tests.csproj --verify-no-changes --no-restore
+      - run: dotnet format src/Lunixi.Sdk/Lunixi.Sdk.csproj --verify-no-changes --no-restore
+      - run: dotnet format samples/AspNetCore/AspNetCore.csproj --verify-no-changes --no-restore
+      - run: dotnet pack src/Lunixi.Sdk/Lunixi.Sdk.csproj -c Release --no-restore -o artifacts
+      - run: dotnet list tests/Lunixi.Sdk.Tests/Lunixi.Sdk.Tests.csproj package --vulnerable --include-transitive
+      # NuGet audit advisories are restore warnings; TreatWarningsAsErrors makes restore fail for an advisory.
