@@ -1,8 +1,15 @@
-name: Publish Lunixi.Sdk 0.1.1 with NuGet OIDC
+name: Publish Lunixi.Sdk with NuGet OIDC
+
+# Dispatch from the matching vVERSION tag so the OIDC identity and package source agree.
 
 on:
   workflow_dispatch:
     inputs:
+      version:
+        description: Existing tested version without v; select its matching vVERSION tag above
+        required: true
+        default: '1.0.0'
+        type: string
       nuget_user:
         description: Existing confirmed NuGet profile username that creates the policy (not email)
         required: true
@@ -12,67 +19,116 @@ permissions:
   contents: read
 
 concurrency:
-  group: nuget-lunixi-sdk-0.1.1
+  group: nuget-lunixi-sdk
   cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   pack:
-    if: github.ref == 'refs/heads/main' && github.repository == 'Lunixi-Payment/lunixi-dotnet'
+    if: github.repository == 'Lunixi-Payment/lunixi-dotnet'
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      VERSION: ${{ inputs.version }}
+    outputs:
+      source_sha: ${{ steps.source.outputs.source_sha }}
+      version: ${{ steps.source.outputs.version }}
+      sha256: ${{ steps.package.outputs.sha256 }}
     steps:
+      - name: Resolve exact public tag and require successful CI on that commit
+        id: source
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, re, urllib.parse, urllib.request
+          version = os.environ['VERSION']
+          assert re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', version), 'Invalid numeric version'
+          repo, tag = 'Lunixi-Payment/lunixi-dotnet', 'v' + version
+          assert os.environ['GITHUB_REPOSITORY'] == repo
+          assert os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch'
+          assert os.environ['GITHUB_REF'] == 'refs/tags/' + tag, 'Dispatch from the matching release tag, not main'
+          def api(path):
+              request = urllib.request.Request('https://api.github.com/repos/' + repo + '/' + path,
+                  headers={'Accept': 'application/vnd.github+json', 'User-Agent': 'lunixi-nuget-release-gate'})
+              with urllib.request.urlopen(request, timeout=20) as response:
+                  body = response.read(4 * 1024 * 1024 + 1)
+              assert len(body) <= 4 * 1024 * 1024, 'Public source metadata exceeds the release gate limit'
+              return json.loads(body)
+          obj = api('git/ref/tags/' + tag)['object']
+          for _ in range(4):
+              assert re.fullmatch(r'[0-9a-f]{40}', obj['sha'])
+              if obj['type'] == 'commit':
+                  break
+              assert obj['type'] == 'tag', 'Tag does not identify a commit'
+              obj = api('git/tags/' + obj['sha'])['object']
+          sha = obj['sha']
+          assert obj['type'] == 'commit' and re.fullmatch(r'[0-9a-f]{40}', sha)
+          assert sha == os.environ['GITHUB_SHA'], 'Tag moved or invocation source differs'
+          runs = api('actions/workflows/ci.yml/runs?' + urllib.parse.urlencode({'head_sha': sha, 'event': 'push', 'per_page': 20}))
+          assert any(run.get('head_sha') == sha and run.get('event') == 'push'
+                     and run.get('status') == 'completed' and run.get('conclusion') == 'success'
+                     and (run.get('head_repository') or {}).get('full_name') == repo
+                     for run in runs['workflow_runs']), 'Successful push CI required for the exact release commit'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('source_sha=' + sha + '\nversion=' + version + '\n')
+          print('Exact release invocation, immutable public source and successful CI verified.')
+          PY
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: 793887b5778137d52a1426a7493961f9ab0c7d22 # reviewed immutable v0.1.1 source
+          ref: ${{ steps.source.outputs.source_sha }}
           persist-credentials: false
-      - name: Require successful public CI for the exact reviewed source
-        run: |
-          python3 - <<'PY'
-          import json, subprocess, urllib.request
-          expected = '793887b5778137d52a1426a7493961f9ab0c7d22'
-          source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
-          if source != expected:
-              raise SystemExit('The checkout does not match the reviewed release source.')
-          url = ('https://api.github.com/repos/Lunixi-Payment/lunixi-dotnet/actions/workflows/ci.yml/runs'
-                 '?head_sha=' + expected + '&event=push&per_page=3')
-          request = urllib.request.Request(url, headers={
-              'Accept': 'application/vnd.github+json',
-              'User-Agent': 'lunixi-nuget-release-gate',
-          })
-          with urllib.request.urlopen(request, timeout=20) as response:
-              body = response.read(1048577)
-          if len(body) > 1048576:
-              raise SystemExit('Public CI metadata exceeds the release gate limit.')
-          runs = json.loads(body).get('workflow_runs', [])
-          if not any(run.get('head_sha') == expected and run.get('event') == 'push'
-                     and run.get('status') == 'completed' and run.get('conclusion') == 'success'
-                     for run in runs):
-              raise SystemExit('The exact reviewed source requires successful push CI.')
-          print('Exact reviewed source has completed successful public CI.')
-          PY
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 8.0.x
       - name: Pack reviewed release source
+        id: package
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
         run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          python3 - <<'PY'
+          import os, xml.etree.ElementTree as ET
+          project = ET.parse('src/Lunixi.Sdk/Lunixi.Sdk.csproj')
+          assert project.findtext('./PropertyGroup/PackageId') == 'Lunixi.Sdk'
+          assert project.findtext('./PropertyGroup/Version') == os.environ['VERSION'], 'Tag and package version differ'
+          PY
           dotnet restore src/Lunixi.Sdk/Lunixi.Sdk.csproj --locked-mode
-          dotnet pack src/Lunixi.Sdk/Lunixi.Sdk.csproj -c Release --no-restore -o package -p:ContinuousIntegrationBuild=true -p:RepositoryCommit=793887b5778137d52a1426a7493961f9ab0c7d22
-          (cd package && sha256sum Lunixi.Sdk.0.1.1.nupkg > SHA256SUMS)
+          dotnet pack src/Lunixi.Sdk/Lunixi.Sdk.csproj -c Release --no-restore -o package -p:ContinuousIntegrationBuild=true -p:RepositoryCommit="$SOURCE_SHA"
+          python3 - <<'PY'
+          import hashlib, os, pathlib
+          directory = pathlib.Path('package')
+          filename = 'Lunixi.Sdk.' + os.environ['VERSION'] + '.nupkg'
+          assert sorted(path.name for path in directory.iterdir()) == [filename], 'Unexpected package artifacts'
+          package = directory / filename
+          assert package.is_file() and not package.is_symlink()
+          digest = hashlib.sha256(package.read_bytes()).hexdigest()
+          (directory / 'SHA256SUMS').write_text(digest + '  ' + filename + '\n')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('sha256=' + digest + '\n')
+          PY
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: lunixi-sdk-0.1.1-nuget
-          path: |
-            package/Lunixi.Sdk.0.1.1.nupkg
-            package/SHA256SUMS
+          name: lunixi-sdk-${{ steps.source.outputs.version }}-nuget
+          path: package/
           if-no-files-found: error
           retention-days: 7
 
   publish:
     needs: pack
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository == 'Lunixi-Payment/lunixi-dotnet'
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'Lunixi-Payment/lunixi-dotnet'
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: read
       id-token: write
+    env:
+      VERSION: ${{ needs.pack.outputs.version }}
+      SOURCE_SHA: ${{ needs.pack.outputs.source_sha }}
+      EXPECTED_SHA256: ${{ needs.pack.outputs.sha256 }}
     steps:
       # NuGet >=7.6 / SDK >=10.0.300 reads NUGET_API_KEY from the step environment.
       # This avoids persisting a key in configuration or passing it in CLI arguments.
@@ -81,19 +137,28 @@ jobs:
           dotnet-version: 10.0.403
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: lunixi-sdk-0.1.1-nuget
+          name: lunixi-sdk-${{ needs.pack.outputs.version }}-nuget
           path: package
       - name: Verify exact package and manifest without executing artifacts
         run: |
+          set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          import hashlib, re, xml.etree.ElementTree as ET, zipfile
+          import hashlib, os, re, xml.etree.ElementTree as ET, zipfile
+          version, source = os.environ['VERSION'], os.environ['SOURCE_SHA']
+          assert re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', version)
+          assert re.fullmatch(r'[0-9a-f]{40}', source) and source == os.environ['GITHUB_SHA']
+          assert os.environ['GITHUB_REPOSITORY'] == 'Lunixi-Payment/lunixi-dotnet'
+          assert os.environ['GITHUB_REF'] == 'refs/tags/v' + version
           directory = Path('package')
-          assert sorted(p.name for p in directory.iterdir()) == ['Lunixi.Sdk.0.1.1.nupkg', 'SHA256SUMS']
-          package = directory / 'Lunixi.Sdk.0.1.1.nupkg'
+          filename = 'Lunixi.Sdk.' + version + '.nupkg'
+          assert sorted(p.name for p in directory.iterdir()) == [filename, 'SHA256SUMS']
+          assert all(p.is_file() and not p.is_symlink() for p in directory.iterdir())
+          package = directory / filename
           checksum = (directory / 'SHA256SUMS').read_text()
-          assert re.fullmatch(r'[0-9a-f]{64}  Lunixi[.]Sdk[.]0[.]1[.]1[.]nupkg\n', checksum)
-          assert hashlib.sha256(package.read_bytes()).hexdigest() == checksum.split()[0]
+          digest = hashlib.sha256(package.read_bytes()).hexdigest()
+          assert digest == os.environ['EXPECTED_SHA256'], 'Artifact differs from the verified pack job'
+          assert checksum == digest + '  ' + filename + '\n'
           with zipfile.ZipFile(package) as archive:
               nuspecs = [n for n in archive.namelist() if n.endswith('.nuspec')]
               assert len(nuspecs) == 1
@@ -101,14 +166,17 @@ jobs:
               namespace = {'n': manifest.tag.partition('}')[0].lstrip('{')}
               metadata = manifest.find('n:metadata', namespace)
               assert metadata.findtext('n:id', namespaces=namespace) == 'Lunixi.Sdk'
-              assert metadata.findtext('n:version', namespaces=namespace) == '0.1.1'
+              assert metadata.findtext('n:version', namespaces=namespace) == version
+              repository = metadata.find('n:repository', namespace)
+              assert repository is not None and repository.get('commit') == source
+              assert repository.get('url') == 'https://github.com/Lunixi-Payment/lunixi-dotnet'
           PY
       - name: Exchange GitHub OIDC identity for a masked short-lived NuGet key
         id: nuget
         uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # resolved official v1
         with:
           user: ${{ inputs.nuget_user }}
-      - name: Publish exactly Lunixi.Sdk 0.1.1
+      - name: Publish exactly the verified Lunixi.Sdk package
         env:
           NUGET_API_KEY: ${{ steps.nuget.outputs.NUGET_API_KEY }}
-        run: dotnet nuget push package/Lunixi.Sdk.0.1.1.nupkg --source https://api.nuget.org/v3/index.json --no-symbols --timeout 120
+        run: dotnet nuget push "package/Lunixi.Sdk.${VERSION}.nupkg" --source https://api.nuget.org/v3/index.json --no-symbols --timeout 120

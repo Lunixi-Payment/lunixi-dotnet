@@ -59,11 +59,7 @@ internal static class Validation
         if (key.Length is < 8 or > 128)
             throw new LunixiConfigurationException("Idempotency-Key must contain 8–128 characters and identify one persisted operation.");
     }
-    internal static void Amount(long amount)
-    {
-        if (amount is < 1 or > MaxSafeInteger)
-            throw new LunixiConfigurationException("Amounts must be positive, JavaScript-safe integer minor units.");
-    }
+    internal static void Amount(string amount) => Money.Parse(amount, positive: true);
     internal static string Id(string id)
     {
         if (string.IsNullOrWhiteSpace(id) || id.Length > 256 || id.Any(char.IsControl))

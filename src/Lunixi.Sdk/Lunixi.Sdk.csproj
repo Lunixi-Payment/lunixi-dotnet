@@ -7,7 +7,7 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <AnalysisLevel>latest</AnalysisLevel>
     <PackageId>Lunixi.Sdk</PackageId>
-    <Version>0.1.1</Version>
+    <Version>1.0.0</Version>
     <Authors>Lunixi</Authors>
     <Description>Lunixi server-side .NET SDK: signed requests, hosted payment intents, payment operations, fraud and verified webhooks.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -19,6 +19,7 @@
   <ItemGroup>
     <PackageReference Include="NSec.Cryptography" Version="25.4.0" />
     <None Include="../../README.md" Pack="true" PackagePath="/" />
+    <None Include="../../MIGRATION-1.0.md" Pack="true" PackagePath="/" />
     <None Include="../../LICENSE" Pack="true" PackagePath="/" />
     <None Include="../../.github/assets/*.svg" Pack="true" PackagePath=".github/assets/" />
     <None Include="../../docs/*.md" Pack="true" PackagePath="docs/" />

@@ -29,10 +29,10 @@ var lunixi = new LunixiClient(new LunixiOptions
     PrivateKeyPem = Environment.GetEnvironmentVariable("LUNIXI_PRIVATE_KEY_PEM")!,
 });
 
-var request = new CreateIntentRequest(10050, "TRY", "ORDER-1001")
+var request = new CreateIntentRequest("10050", "TRY", "ORDER-1001")
 {
     CallbackUrl = new Uri("https://merchant.example/payments/return"),
-    BasketItems = [new BasketItem("SKU-1", "Demo product", 10050)],
+    BasketItems = [new BasketItem("SKU-1", "Demo product", "10050")],
 };
 // Load this key from a persisted checkout attempt; reuse it after network failures.
 var response = await lunixi.Payments.CreateIntentAsync(request, persistedAttemptKey);
@@ -42,7 +42,7 @@ var token = response.Data.GetProperty("token").GetString();
 
 Register one client per application and dispose it during shutdown. The key determines TEST/LIVE. Register the public Ed25519 key in the dashboard; keep the PKCS#8 PEM private key on your server. `Ed25519Signer.GenerateKeyPair()` generates both. → [Authentication](/getting-started/authentication)
 
-Amounts are positive integer minor units: `10050` = 100.50 TRY. Read prices from your order database. Basket `Price` is the complete line total; line totals must equal `Amount`. Legacy top-level amount fields are rejected. Provide buyer/billing/shipping JSON from trusted server records when your checkout requires them.
+Amounts are positive canonical minor-unit strings: `10050` = 100.50 TRY. Read prices from your order database. Basket `Price` is the complete line total; line totals must equal `Amount`. Legacy top-level amount fields are rejected. Provide buyer/billing/shipping JSON from trusted server records when your checkout requires them.
 
 Pass the token to the existing [Lunixi Checkout Form](/payments/checkout-form). The form handles enabled methods and buyer interactions. The SDK does not recreate card fields or enable raw-card charging by default. Browser returns are informational; fulfillment depends on verified webhooks and authenticated status reads.
 
@@ -60,8 +60,8 @@ Token acquisition is signed and bodyless. Tokens use a 30-second expiry margin a
 
 ```csharp
 var payment = await lunixi.Payments.GetAsync(paymentId);
-var captured = await lunixi.Payments.CaptureAsync(paymentId, persistedCaptureKey, amount: 10050);
-var refunded = await lunixi.Payments.RefundAsync(paymentId, persistedRefundKey, amount: 1000);
+var captured = await lunixi.Payments.CaptureAsync(paymentId, persistedCaptureKey, amount: "10050");
+var refunded = await lunixi.Payments.RefundAsync(paymentId, persistedRefundKey, amount: "1000");
 var voided = await lunixi.Payments.VoidAsync(paymentId, persistedVoidKey);
 var methods = await lunixi.Payments.ListMethodsAsync();
 ```

@@ -158,8 +158,11 @@ public sealed class SampleStore(string databasePath)
     {
         if (value.ValueKind != JsonValueKind.Object || !value.TryGetProperty(field, out var item)) return null;
         var minimum = allowZero ? 0 : 1;
-        if (item.ValueKind == JsonValueKind.Number && item.TryGetInt64(out var number) && number >= minimum && number <= 9_007_199_254_740_991) return number;
-        if (item.ValueKind == JsonValueKind.String && long.TryParse(item.GetString(), NumberStyles.None, CultureInfo.InvariantCulture, out var text) && text >= minimum && text <= 9_007_199_254_740_991) return text;
+        if (item.ValueKind == JsonValueKind.String)
+        {
+            try { var exact = Lunixi.Money.Parse(item.GetString()!, positive: !allowZero); return exact; }
+            catch (LunixiConfigurationException) { return null; }
+        }
         return null;
     }
 }

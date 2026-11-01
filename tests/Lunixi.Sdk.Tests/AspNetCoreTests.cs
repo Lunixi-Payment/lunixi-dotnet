@@ -35,7 +35,7 @@ public sealed class AspNetCoreTests
             {
                 if (request.RequestUri!.AbsolutePath.EndsWith("/auth/token")) return FakeHandler.Json("{\"access_token\":\"token\"}");
                 if (request.Method == HttpMethod.Get)
-                    return FakeHandler.Json("{\"data\":{\"id\":\"pay-demo-1\",\"merchantId\":\"merchant-demo-1\",\"orderId\":\"DEMO-1001\",\"currency\":\"TRY\",\"amount\":10050,\"status\":\"CAPTURED\",\"details\":{\"capturedAmount\":10050,\"refundedAmount\":0}}}");
+                    return FakeHandler.Json("{\"data\":{\"id\":\"pay-demo-1\",\"merchantId\":\"merchant-demo-1\",\"orderId\":\"DEMO-1001\",\"currency\":\"TRY\",\"amount\":\"10050\",\"status\":\"CAPTURED\",\"details\":{\"capturedAmount\":\"10050\",\"refundedAmount\":\"0\"}}}");
                 keys.Add(request.Headers.GetValues("Idempotency-Key").Single()); writes.Add(await request.Content!.ReadAsStringAsync(ct));
                 return FakeHandler.Json("{\"data\":{\"paymentId\":\"pay-demo-1\",\"token\":\"synthetic-checkout-token\"}}");
             })));
@@ -45,9 +45,9 @@ public sealed class AspNetCoreTests
             await app.StartAsync(); var http = app.GetTestClient();
             Assert.Equal(HttpStatusCode.Unauthorized, (await http.PostAsync("/checkout/DEMO-1001", null)).StatusCode);
             http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ApiToken);
-            Assert.Equal(HttpStatusCode.OK, (await http.PostAsync("/checkout/DEMO-1001", new StringContent("{\"amount\":1}"))).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await http.PostAsync("/checkout/DEMO-1001", new StringContent("{\"amount\":\"1\"}"))).StatusCode);
             Assert.Equal(HttpStatusCode.OK, (await http.PostAsync("/checkout/DEMO-1001", null)).StatusCode);
-            Assert.Equal(2, writes.Count); Assert.Single(keys.Distinct()); Assert.All(writes, body => Assert.Contains("\"amount\":10050", body));
+            Assert.Equal(2, writes.Count); Assert.Single(keys.Distinct()); Assert.All(writes, body => Assert.Contains("\"amount\":\"10050\"", body));
             await http.GetAsync("/payments/return?success=true&status=CAPTURED&orderId=DEMO-1001");
             Assert.Contains("UNPAID", await http.GetStringAsync("/orders/DEMO-1001"));
 

@@ -7,7 +7,7 @@ namespace Lunixi;
 public sealed class CreateIntentRequest
 {
     /// <summary>Positive basket total in minor units.</summary>
-    public long Amount { get; }
+    public string Amount { get; }
     /// <summary>The gateway currency code.</summary>
     public string Currency { get; }
     /// <summary>Your stable order reference.</summary>
@@ -31,7 +31,7 @@ public sealed class CreateIntentRequest
     /// <summary>An optional merchant description.</summary>
     public string? Description { get; init; }
     /// <summary>Creates a hosted payment request without collecting card data on the merchant server.</summary>
-    public CreateIntentRequest(long amount, string currency, string orderId)
+    public CreateIntentRequest(string amount, string currency, string orderId)
     {
         var normalizedCurrency = currency?.ToUpperInvariant() ?? "";
         Validation.Amount(amount); RequestValidation.Currency(normalizedCurrency); RequestValidation.Text(orderId, "orderId", 256);
@@ -52,10 +52,10 @@ public sealed class CreateIntentRequest
         {
             ArgumentNullException.ThrowIfNull(item);
             Validation.Amount(item.Price);
-            if (total > Amount - item.Price) throw new LunixiConfigurationException("Basket line prices must sum exactly to Amount.");
-            total += item.Price;
+            if (total > Money.Parse(Amount) - Money.Parse(item.Price)) throw new LunixiConfigurationException("Basket line prices must sum exactly to Amount.");
+            total += Money.Parse(item.Price);
         }
-        if (total != Amount) throw new LunixiConfigurationException("Basket line prices must sum exactly to Amount.");
+        if (total != Money.Parse(Amount)) throw new LunixiConfigurationException("Basket line prices must sum exactly to Amount.");
     }
     /// <summary>Returns no buyer data, checkout token or merchant metadata.</summary>
     public override string ToString() => "CreateIntentRequest { RequestData = [REDACTED] }";
@@ -71,13 +71,13 @@ public sealed class BasketItem
     /// <summary>PHYSICAL or VIRTUAL.</summary>
     public string ItemType { get; }
     /// <summary>Line total in positive integer minor units.</summary>
-    public long Price { get; }
+    public string Price { get; }
     /// <summary>The item's primary category, if used by the gateway.</summary>
     public string? Category1 { get; init; }
     /// <summary>The item's secondary category.</summary>
     public string? Category2 { get; init; }
     /// <summary>Creates one validated basket line.</summary>
-    public BasketItem(string id, string name, long price, string itemType = "PHYSICAL")
+    public BasketItem(string id, string name, string price, string itemType = "PHYSICAL")
     {
         RequestValidation.Text(id, "id", 256); RequestValidation.Text(name, "name", 1024); Validation.Amount(price);
         if (itemType is not ("PHYSICAL" or "VIRTUAL")) throw new LunixiConfigurationException("ItemType must be PHYSICAL or VIRTUAL.");
@@ -103,12 +103,27 @@ public sealed class PaymentsClient
     /// <summary>Lists payments. Filters are restricted to the public gateway filter names.</summary>
     public Task<LunixiResponse> ListAsync(IReadOnlyDictionary<string, string>? filters = null, CancellationToken cancellationToken = default)
         => client.SendAsync(HttpMethod.Get, BasePath + RequestValidation.Query(filters, ["page", "limit", "status", "customerId", "includeLegs"]), signed: false, cancellationToken: cancellationToken);
-    /// <summary>Captures an authorized payment, optionally partially. Reuse the operation key on retry.</summary>
-    public Task<LunixiResponse> CaptureAsync(string paymentId, string idempotencyKey, long? amount = null, CancellationToken cancellationToken = default)
-        => OperationAsync(paymentId, "capture", idempotencyKey, amount, null, cancellationToken);
-    /// <summary>Refunds a payment, optionally partially. Reuse the operation key on retry.</summary>
-    public Task<LunixiResponse> RefundAsync(string paymentId, string idempotencyKey, long? amount = null, string? reason = null, CancellationToken cancellationToken = default)
-        => OperationAsync(paymentId, "refund", idempotencyKey, amount, reason, cancellationToken);
+    /// <summary>Captures the remaining authorization with no amount field. Reuse the operation key on retry.</summary>
+    public Task<LunixiResponse> CaptureAsync(string paymentId, string idempotencyKey, CancellationToken cancellationToken = default)
+        => OperationAsync(paymentId, "capture", idempotencyKey, null, null, cancellationToken);
+    /// <summary>Captures an explicit positive amount. Null is invalid.</summary>
+    public Task<LunixiResponse> CaptureAsync(string paymentId, string idempotencyKey, string amount, CancellationToken cancellationToken = default)
+    {
+        Validation.Amount(amount);
+        return OperationAsync(paymentId, "capture", idempotencyKey, amount, null, cancellationToken);
+    }
+    /// <summary>Refunds the remaining balance with no amount field. Reuse the operation key on retry.</summary>
+    public Task<LunixiResponse> RefundAsync(string paymentId, string idempotencyKey, CancellationToken cancellationToken = default)
+        => RefundRemainingAsync(paymentId, idempotencyKey, cancellationToken: cancellationToken);
+    /// <summary>Refunds an explicit positive amount. Null is invalid.</summary>
+    public Task<LunixiResponse> RefundAsync(string paymentId, string idempotencyKey, string amount, string? reason = null, CancellationToken cancellationToken = default)
+    {
+        Validation.Amount(amount);
+        return OperationAsync(paymentId, "refund", idempotencyKey, amount, reason, cancellationToken);
+    }
+    /// <summary>Refunds the remaining balance, optionally recording a reason, with no amount field.</summary>
+    public Task<LunixiResponse> RefundRemainingAsync(string paymentId, string idempotencyKey, string? reason = null, CancellationToken cancellationToken = default)
+        => OperationAsync(paymentId, "refund", idempotencyKey, null, reason, cancellationToken);
     /// <summary>Voids an authorization using the original payment reference.</summary>
     public Task<LunixiResponse> VoidAsync(string paymentId, string idempotencyKey, CancellationToken cancellationToken = default)
     {
@@ -132,7 +147,7 @@ public sealed class PaymentsClient
         catch (LunixiValidationException e) when (e.StatusCode == 400 && e.Response is { } body &&
             SplitPaymentRequest.InProgress.Contains(e.Code ?? "") && body.TryGetProperty("data", out var data) &&
             LunixiClient.Property(data, "splitPaymentId") is { Length: > 0 })
-        { return new LunixiResponse(400, e.Response!.Value, e.RequestId); }
+        { Money.ValidateResponse(e.Response!.Value, true); return new LunixiResponse(400, e.Response!.Value, e.RequestId); }
     }
     /// <summary>Reads a split payment and its legs. Only a verified COMPLETED, balanced result is final success.</summary>
     public Task<LunixiResponse> GetSplitAsync(string splitPaymentId, CancellationToken cancellationToken = default)
@@ -141,7 +156,7 @@ public sealed class PaymentsClient
     public Task<LunixiResponse> ListSplitsAsync(IReadOnlyDictionary<string, string>? filters = null, CancellationToken cancellationToken = default)
         => client.SendAsync(HttpMethod.Get, BasePath + "/split" + RequestValidation.Query(filters, ["status", "currency", "createdFrom", "createdTo", "orderId", "ownerRef", "limit", "after"]), signed: false, cancellationToken: cancellationToken);
     /// <summary>Refunds a split payment's parent; never refund each leg independently.</summary>
-    public Task<LunixiResponse> RefundSplitAsync(string splitPaymentId, long amount, string idempotencyKey, string? reason = null, CancellationToken cancellationToken = default)
+    public Task<LunixiResponse> RefundSplitAsync(string splitPaymentId, string amount, string idempotencyKey, string? reason = null, CancellationToken cancellationToken = default)
     {
         Validation.Amount(amount); Validation.IdempotencyKey(idempotencyKey);
         if (reason is not null) RequestValidation.Text(reason, "reason", 500);
@@ -161,12 +176,15 @@ public sealed class PaymentsClient
     /// <summary>Resends an OTP for an existing payment action; inspect the returned replacement action identifier.</summary>
     public Task<LunixiResponse> ResendActionAsync(string paymentId, string actionId, CancellationToken cancellationToken = default)
         => client.SendAsync(HttpMethod.Post, BasePath + "/" + Validation.Id(paymentId) + "/actions/" + Validation.Id(actionId) + "/resend", new { }, cancellationToken: cancellationToken);
-    private Task<LunixiResponse> OperationAsync(string id, string operation, string key, long? amount, string? reason, CancellationToken token)
+    private Task<LunixiResponse> OperationAsync(string id, string operation, string key, string? amount, string? reason, CancellationToken token)
     {
-        Validation.IdempotencyKey(key); if (amount is not null) Validation.Amount(amount.Value);
+        Validation.IdempotencyKey(key); if (amount is not null) Validation.Amount(amount);
         if (reason is not null) RequestValidation.Text(reason, "reason", 500);
+        var body = new Dictionary<string, object> { ["paymentIntentId"] = id };
+        if (amount is not null) body["amount"] = amount;
+        if (reason is not null) body["reason"] = reason;
         return client.SendAsync(HttpMethod.Post, BasePath + "/" + Validation.Id(id) + "/" + operation,
-            new { paymentIntentId = id, amount, reason }, key, cancellationToken: token);
+            body, key, cancellationToken: token);
     }
 }
 
@@ -195,9 +213,9 @@ internal static class RequestValidation
     }
     internal static long PositiveAmount(JsonElement body, string name)
     {
-        if (!body.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.Number || !value.TryGetInt64(out var amount))
+        if (!body.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.String)
             throw new LunixiConfigurationException($"{name} must be positive integer minor units.");
-        Validation.Amount(amount); return amount;
+        return Money.Parse(value.GetString()!, positive: true);
     }
     internal static string RequiredText(JsonElement body, string name, int maxLength)
     {

@@ -45,10 +45,10 @@ namespace Lunixi.AspNetCoreSample
                     return Results.Conflict(new { code = "reconciliation_required" });
                 try
                 {
-                    var result = await client.Payments.CreateIntentAsync(new(order.Amount, order.Currency, order.OrderId)
+                    var result = await client.Payments.CreateIntentAsync(new(order.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture), order.Currency, order.OrderId)
                     {
                         CallbackUrl = settings.CallbackUrl,
-                        BasketItems = [new("DEMO-SKU", "Demo product", order.Amount)],
+                        BasketItems = [new("DEMO-SKU", "Demo product", order.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture))],
                     }, order.IdempotencyKey, context.RequestAborted);
                     var id = SampleStore.Text(result.Data, "paymentId");
                     var token = SampleStore.Text(result.Data, "token");

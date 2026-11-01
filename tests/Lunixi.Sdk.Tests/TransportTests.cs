@@ -32,8 +32,8 @@ public class TransportTests
             Assert.True(SignatureAlgorithm.Ed25519.Verify(publicKey, Encoding.UTF8.GetBytes(canonical), Convert.FromBase64String(request.Headers.GetValues("X-Signature").Single())));
             return FakeHandler.Json(request.RequestUri.AbsolutePath == "/api/v1/auth/token" ? "{\"access_token\":\"synthetic-token\",\"expires_in\":1800}" : "{\"data\":{\"status\":\"CREATED\"}}");
         }));
-        await client.Payments.CreateIntentAsync(new(10050, "TRY", "ORDER-1"), "checkout:persisted-001");
-        await client.Payments.CreateIntentAsync(new(10050, "TRY", "ORDER-1"), "checkout:persisted-001");
+        await client.Payments.CreateIntentAsync(new("10050", "TRY", "ORDER-1"), "checkout:persisted-001");
+        await client.Payments.CreateIntentAsync(new("10050", "TRY", "ORDER-1"), "checkout:persisted-001");
         Assert.Equal(1, authCount); Assert.Equal(2, operations);
     }
 
@@ -63,7 +63,7 @@ public class TransportTests
             nonces.Add(request.Headers.GetValues("X-Nonce").Single());
             return FakeHandler.Json(code: bodies.Count == 1 ? HttpStatusCode.ServiceUnavailable : HttpStatusCode.OK);
         }));
-        await client.Payments.RefundAsync("pay-1", "refund:persisted-key", 100);
+        await client.Payments.RefundAsync("pay-1", "refund:persisted-key", "100");
         Assert.Equal(2, bodies.Count); Assert.Single(bodies.Distinct()); Assert.Single(keys.Distinct()); Assert.Equal(2, nonces.Distinct().Count());
     }
 
@@ -137,8 +137,8 @@ public class TransportTests
     public async Task RemovedAmountFieldsAreRejectedBeforeNetwork()
     {
         using var client = new LunixiClient(TestOptions.Create(), new FakeHandler((_, _) => throw new Xunit.Sdk.XunitException("No network expected")));
-        await Assert.ThrowsAsync<LunixiConfigurationException>(() => client.SendAsync(HttpMethod.Post, "/api/v1/payments/intents", new { price = 1, amount = 100 }));
-        await Assert.ThrowsAsync<LunixiConfigurationException>(() => client.SendAsync(HttpMethod.Post, "/api/v1/payments/intents", new { paidPrice = 1, amount = 100 }));
+        await Assert.ThrowsAsync<LunixiConfigurationException>(() => client.SendAsync(HttpMethod.Post, "/api/v1/payments/intents", new { price = "1", amount = "100" }));
+        await Assert.ThrowsAsync<LunixiConfigurationException>(() => client.SendAsync(HttpMethod.Post, "/api/v1/payments/intents", new { paidPrice = "1", amount = "100" }));
     }
 
     [Theory]

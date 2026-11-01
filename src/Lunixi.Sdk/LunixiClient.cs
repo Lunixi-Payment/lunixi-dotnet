@@ -73,6 +73,7 @@ public sealed class LunixiClient : IDisposable
         if ((method == HttpMethod.Get || method == HttpMethod.Head) && body is not null)
             throw new LunixiConfigurationException("GET and HEAD requests cannot carry a body.");
         if (idempotencyKey is not null) Validation.IdempotencyKey(idempotencyKey);
+        Money.ValidateOperationAmount(uri.AbsolutePath, body);
         var bytes = body is null ? null : CanonicalJson.Serialize(body);
         if (bytes is not null && uri.AbsolutePath.StartsWith("/api/v1/payments/", StringComparison.Ordinal))
         {
@@ -81,6 +82,7 @@ public sealed class LunixiClient : IDisposable
                 (document.RootElement.TryGetProperty("price", out _) || document.RootElement.TryGetProperty("paidPrice", out _)))
                 throw new LunixiConfigurationException("Root price and paidPrice are removed. Use integer minor-unit amount or totalAmount; basket line price remains supported.");
         }
+        if (bytes is not null && Money.IsFiatRoute(uri.AbsolutePath)) { using var moneyDocument = JsonDocument.Parse(bytes); Money.ValidateFields(moneyDocument.RootElement, false); }
         var write = method != HttpMethod.Get && method != HttpMethod.Head;
         var retryable = !write || idempotencyKey is not null;
         var retries = 0; var refreshed = false;
@@ -109,6 +111,7 @@ public sealed class LunixiClient : IDisposable
                 { await DelayAsync(++retries, cancellationToken).ConfigureAwait(false); continue; }
                 var payload = await ReadJsonAsync(response, timeout.Token, cancellationToken, write).ConfigureAwait(false);
                 var requestId = Header(response, "x-request-id");
+                if (response.IsSuccessStatusCode && Money.IsFiatRoute(uri.AbsolutePath)) Money.ValidateResponse(payload, write);
                 if (response.IsSuccessStatusCode) return new LunixiResponse((int)response.StatusCode, payload, requestId);
                 throw Error(response, payload, requestId);
             }
@@ -119,7 +122,7 @@ public sealed class LunixiClient : IDisposable
     {
         var request = new HttpRequestMessage(method, uri);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        request.Headers.UserAgent.ParseAdd("Lunixi.Sdk/0.1.1");
+        request.Headers.UserAgent.ParseAdd("Lunixi.Sdk/1.0.0");
         if (body is not null)
         {
             request.Content = new ByteArrayContent(body);

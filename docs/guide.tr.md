@@ -35,10 +35,10 @@ var lunixi = new LunixiClient(new LunixiOptions
     PrivateKeyPem = Environment.GetEnvironmentVariable("LUNIXI_PRIVATE_KEY_PEM")!,
 });
 
-var request = new CreateIntentRequest(10050, "TRY", "ORDER-1001")
+var request = new CreateIntentRequest("10050", "TRY", "ORDER-1001")
 {
     CallbackUrl = new Uri("https://merchant.example/payments/return"),
-    BasketItems = [new BasketItem("SKU-1", "Örnek ürün", 10050)],
+    BasketItems = [new BasketItem("SKU-1", "Örnek ürün", "10050")],
 };
 // Anahtarı kalıcı ödeme denemesinden okuyun; ağ hatasından sonra aynı anahtarı kullanın.
 var response = await lunixi.Payments.CreateIntentAsync(request, persistedAttemptKey);
@@ -66,8 +66,8 @@ Token isteği imzalı ve gövdesizdir. Token süresinde 30 saniye pay bırakıl�
 
 ```csharp
 var payment = await lunixi.Payments.GetAsync(paymentId);
-var captured = await lunixi.Payments.CaptureAsync(paymentId, persistedCaptureKey, amount: 10050);
-var refunded = await lunixi.Payments.RefundAsync(paymentId, persistedRefundKey, amount: 1000);
+var captured = await lunixi.Payments.CaptureAsync(paymentId, persistedCaptureKey, amount: "10050");
+var refunded = await lunixi.Payments.RefundAsync(paymentId, persistedRefundKey, amount: "1000");
 var voided = await lunixi.Payments.VoidAsync(paymentId, persistedVoidKey);
 var methods = await lunixi.Payments.ListMethodsAsync();
 ```

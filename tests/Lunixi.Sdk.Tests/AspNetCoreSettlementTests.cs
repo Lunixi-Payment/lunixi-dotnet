@@ -19,7 +19,7 @@ public sealed class AspNetCoreSettlementTests
     private const string Merchant = "merchant-demo-1";
     private const string PaymentId = "pay-demo-1";
     private static string Evidence(string status = "CAPTURED", long captured = 10050, long refunded = 0)
-        => JsonSerializer.Serialize(new { data = new { id = PaymentId, merchantId = Merchant, orderId = "DEMO-1001", amount = 10050, currency = "TRY", status, details = new { capturedAmount = captured, refundedAmount = refunded } } });
+        => JsonSerializer.Serialize(new { data = new { id = PaymentId, merchantId = Merchant, orderId = "DEMO-1001", amount = "10050", currency = "TRY", status, details = new { capturedAmount = captured.ToString(System.Globalization.CultureInfo.InvariantCulture), refundedAmount = refunded.ToString(System.Globalization.CultureInfo.InvariantCulture) } } });
     private static string Delivery(string eventId, string paymentId = PaymentId, string type = "payment.captured")
         => JsonSerializer.Serialize(new { id = eventId, type, data = new { intentId = paymentId, capturedAmountMinor = "10050", currency = "TRY" } });
 
@@ -66,10 +66,10 @@ public sealed class AspNetCoreSettlementTests
             "payment" => Evidence().Replace(PaymentId, "other-payment", StringComparison.Ordinal),
             "order" => Evidence().Replace("DEMO-1001", "OTHER-ORDER", StringComparison.Ordinal),
             "currency" => Evidence().Replace("TRY", "USD", StringComparison.Ordinal),
-            "amount" => Evidence().Replace("\"amount\":10050", "\"amount\":10051", StringComparison.Ordinal),
-            "captured-missing" => Evidence().Replace("\"capturedAmount\":10050,", "", StringComparison.Ordinal),
-            "refunded-missing" => Evidence().Replace(",\"refundedAmount\":0", "", StringComparison.Ordinal),
-            "captured-fraction" => Evidence().Replace("\"capturedAmount\":10050", "\"capturedAmount\":100.50", StringComparison.Ordinal),
+            "amount" => Evidence().Replace("\"amount\":\"10050\"", "\"amount\":\"10051\"", StringComparison.Ordinal),
+            "captured-missing" => Evidence().Replace("\"capturedAmount\":\"10050\",", "", StringComparison.Ordinal),
+            "refunded-missing" => Evidence().Replace(",\"refundedAmount\":\"0\"", "", StringComparison.Ordinal),
+            "captured-fraction" => Evidence().Replace("\"capturedAmount\":\"10050\"", "\"capturedAmount\":100.50", StringComparison.Ordinal),
             "nonzero-refund" => Evidence(refunded: 100),
             "excess-refund" => Evidence(refunded: 10051),
             "split-leg" => Evidence().Replace("\"status\":\"CAPTURED\"", "\"status\":\"CAPTURED\",\"split\":{\"role\":\"LEG\"}", StringComparison.Ordinal),
@@ -144,8 +144,7 @@ public sealed class AspNetCoreSettlementTests
     public async Task AuthenticatedStringMinorBalancesAreAccepted()
     {
         await using var host = new SampleHost(); await host.Start(); await host.Checkout();
-        host.PaymentReply = Evidence().Replace("\"capturedAmount\":10050", "\"capturedAmount\":\"10050\"", StringComparison.Ordinal)
-            .Replace("\"refundedAmount\":0", "\"refundedAmount\":\"0\"", StringComparison.Ordinal);
+        host.PaymentReply = Evidence();
         Assert.Equal(HttpStatusCode.OK, (await host.Send(Delivery("string-balances"), "string-balances")).StatusCode);
         Assert.Equal("PAID", await host.State());
     }
