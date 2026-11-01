@@ -1,5 +1,7 @@
 # Verification record — 0.1.0
 
+**Historical verification record:** the package versions and results below describe the named 0.x release and are preserved unchanged.
+
 Local verification performed on 2026-10-31, macOS arm64, .NET SDK 8.0.427/runtime 8.0.33. The library also compiled under SDK 10.0.403. These are local results; the configured Linux/Windows/macOS GitHub Actions matrix has not been executed by this record.
 
 | Check | Result |
