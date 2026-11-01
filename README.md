@@ -7,25 +7,29 @@
 
 # Lunixi .NET SDK
 
-**1.0.0 is prepared and unreleased.** The examples below use the breaking canonical money-string API. Use the reviewed local source for this version; historical 0.x registry artifacts do not implement it. See [migration](MIGRATION-1.0.md).
+**Version 1.0.1 uses canonical minor-unit strings for money.** This is a breaking change from 0.x; update request and response handling together. See [migration](MIGRATION-1.0.md).
 
 Historical release record: **[Lunixi.Sdk 0.1.1 is published on NuGet](https://www.nuget.org/packages/Lunixi.Sdk/0.1.1)**. The downloaded public package, source commit and NuGet catalog SHA-512 were verified on 31 October 2026.
 
-Version 1.0.0 includes a concrete merchant-site presentation example. **Embedded checkout is the default**: load only the official Lunixi bundle and mount the existing form; methods and multi-card choices stay in the Lunixi panel. Optional hosted mode uses the backend `paymentPageUrl` after exact HTTPS `pay.lunixi.com/payment/` validation. Its token may differ from the embedded token. Missing URLs keep embedded available and hosted on hold/reconciliation with the original attempt/key. Never derive a URL from the browser token. Authorize the customer/order and native browser CSRF before rendering, send `Cache-Control: private, no-store`, preserve the merchant CSP nonce and keep tokens/HTML/redirect URLs out of logs. Generic response data preserves `paymentPageUrl`; no new typed product parity is claimed.
+Version 1.0.1 includes a concrete merchant-site presentation example. **Embedded checkout is the default**: load only the official Lunixi bundle and mount the existing form; methods and multi-card choices stay in the Lunixi panel. Optional hosted mode uses the backend `paymentPageUrl` after exact HTTPS `pay.lunixi.com/payment/` validation. Its token may differ from the embedded token. Missing URLs keep embedded available and hosted on hold/reconciliation with the original attempt/key. Never derive a URL from the browser token. Authorize the customer/order and native browser CSRF before rendering, send `Cache-Control: private, no-store`, preserve the merchant CSP nonce and keep tokens/HTML/redirect URLs out of logs. Generic response data preserves `paymentPageUrl`; no new typed product parity is claimed.
 
-Server-side Lunixi integration for .NET 8 or newer: Ed25519 authentication, checkout-form intents, payment operations, split-payment DTOs, fraud and signed webhooks. Works with ASP.NET Core, worker services and other .NET applications. Version **1.0.0**, MIT licensed.
+Server-side Lunixi integration for .NET 8 or newer: Ed25519 authentication, checkout-form intents, payment operations, split-payment DTOs, fraud and signed webhooks. Works with ASP.NET Core, worker services and other .NET applications. Version **1.0.1**, MIT licensed.
 
 [Türkçe kullanım kılavuzu](docs/guide.tr.md) · [Documentation](https://docs.lunixi.com/en/sdks/dotnet) · [Lunixi](https://lunixi.com)
 
 ## Installation
 
-Use the reviewed local `src/Lunixi.Sdk/Lunixi.Sdk.csproj` as a project reference, or a locally built 1.0.0 package. NuGet publication is a separate release step.
+Install the exact package after version 1.0.1 is available on NuGet:
 
-For source development or a local package build, this repository also produces `Lunixi.Sdk.1.0.0.nupkg`:
+```bash
+dotnet add package Lunixi.Sdk --version 1.0.1 --source https://api.nuget.org/v3/index.json
+```
+
+For source development or a local package build, this repository also produces `Lunixi.Sdk.1.0.1.nupkg`:
 
 ```bash
 dotnet pack src/Lunixi.Sdk/Lunixi.Sdk.csproj -c Release -o artifacts
-dotnet add /path/to/YourApp.csproj package Lunixi.Sdk --version 1.0.0 --source /absolute/path/to/this/repo/artifacts
+dotnet add /path/to/YourApp.csproj package Lunixi.Sdk --version 1.0.1 --source /absolute/path/to/this/repo/artifacts
 ```
 
 Alternatively reference `src/Lunixi.Sdk/Lunixi.Sdk.csproj` directly. Restore the generated package's dependencies from your normal NuGet feed. [NSec.Cryptography 25.4.0](https://www.nuget.org/packages/NSec.Cryptography/25.4.0) supplies Ed25519 via libsodium and supports .NET 8; compatible native runtime assets must be present when deploying. Browser/WASM is not supported.
@@ -91,7 +95,7 @@ Split APIs: `CreateSplitAsync`, `GetSplitAsync`, `ListSplitsAsync`, `RefundSplit
 
 ## Coverage and explicit transport
 
-| Surface | .NET 1.0.0 |
+| Surface | .NET 1.0.1 |
 | --- | --- |
 | Hosted intents, payment status/list, capture/refund/void, methods | Typed clients |
 | Split creation/status/list/refund and payment actions | Validated JSON DTO and typed client methods; rollout dependent |
@@ -153,4 +157,4 @@ Tests use offline HTTP handlers, a Node.js Ed25519/JSON.stringify fixture, exist
 
 The runnable ASP.NET Core sample now exposes authenticated `POST /checkout/{orderId}/form` for embedded HTML by default; `?mode=hosted` uses the validated backend URL. The existing `/checkout/{orderId}` JSON contract is retained. `Lunixi.AspNetCoreSample.CheckoutPresentation` contains the renderer and URL validator. `DEMO_API_TOKEN` remains strictly server-to-server: never send it to browser JavaScript. Your merchant checkout controller must authenticate the customer, verify order ownership and native CSRF before proxying/rendering this response. This sample does not implement customer login or a production tenant authorization model.
 
-The prepared 1.0.0 release is unreleased. See [the money-string migration](MIGRATION-1.0.md).
+Before upgrading from 0.x, follow [the money-string migration](MIGRATION-1.0.md).

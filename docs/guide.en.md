@@ -1,18 +1,17 @@
 # .NET / C# SDK
 
-Current source release: **0.1.1**. NuGet publication requires a separate approved release; this does not assert registry availability.
+Version **1.0.1** uses canonical minor-unit strings. Follow the SDK money-string migration and install after the version is available on NuGet.
 
 The source patch adds a concrete merchant-site presentation example. **Embedded checkout is the default**: load only the official Lunixi bundle and mount the existing form; methods and multi-card choices stay in the Lunixi panel. Optional hosted mode uses the backend `paymentPageUrl` after exact HTTPS `pay.lunixi.com/payment/` validation. Its token may differ from the embedded token. Missing URLs keep embedded available and hosted on hold/reconciliation with the original attempt/key. Never derive a URL from the browser token. Authorize the customer/order and native browser CSRF before rendering, send `Cache-Control: private, no-store`, preserve the merchant CSP nonce and keep tokens/HTML/redirect URLs out of logs. Generic response data preserves `paymentPageUrl`; no new typed product parity is claimed.
 
-`Lunixi.Sdk` 0.1.1 provides Ed25519 signing, token caching, checkout intents, payment operations, split DTO validation, fraud clients and raw-body webhook verification. It supports .NET 8 or newer and works with ASP.NET Core, background workers and other server applications.
+`Lunixi.Sdk` 1.0.1 provides Ed25519 signing, token caching, checkout intents, payment operations, split DTO validation, fraud clients and raw-body webhook verification. It supports .NET 8 or newer and works with ASP.NET Core, background workers and other server applications.
 
 ## Installation
 
-Source: [Lunixi-Payment/lunixi-dotnet](https://github.com/Lunixi-Payment/lunixi-dotnet). NuGet.org publication is a separate release step; source availability does not imply registry availability. From the SDK checkout:
+Install the exact version after it is available on NuGet:
 
 ```bash
-dotnet pack src/Lunixi.Sdk/Lunixi.Sdk.csproj -c Release -o artifacts
-dotnet add /path/to/YourApp.csproj package Lunixi.Sdk --version 0.1.1 --source /absolute/path/to/sdk/artifacts
+dotnet add package Lunixi.Sdk --version 1.0.1 --source https://api.nuget.org/v3/index.json
 ```
 
 Keep your normal NuGet feed enabled for dependencies, or reference the SDK project directly. NSec/libsodium supplies Ed25519 with native assets for supported server runtimes. Browser/WASM is not supported. The sample and test host require the .NET 8 runtime.
@@ -42,7 +41,7 @@ var token = response.Data.GetProperty("token").GetString();
 
 Register one client per application and dispose it during shutdown. The key determines TEST/LIVE. Register the public Ed25519 key in the dashboard; keep the PKCS#8 PEM private key on your server. `Ed25519Signer.GenerateKeyPair()` generates both. → [Authentication](/getting-started/authentication)
 
-Amounts are positive canonical minor-unit strings: `10050` = 100.50 TRY. Read prices from your order database. Basket `Price` is the complete line total; line totals must equal `Amount`. Legacy top-level amount fields are rejected. Provide buyer/billing/shipping JSON from trusted server records when your checkout requires them.
+Amounts are positive canonical minor-unit strings: `"10050"` = 100.50 TRY. Read prices from your order database. Basket `Price` is the complete line total; line totals must equal `Amount`. Legacy top-level amount fields are rejected. Provide buyer/billing/shipping JSON from trusted server records when your checkout requires them.
 
 Pass the token to the existing [Lunixi Checkout Form](/payments/checkout-form). The form handles enabled methods and buyer interactions. The SDK does not recreate card fields or enable raw-card charging by default. Browser returns are informational; fulfillment depends on verified webhooks and authenticated status reads.
 
@@ -68,7 +67,7 @@ var methods = await lunixi.Payments.ListMethodsAsync();
 
 Set `CreateIntentRequest.Preauth = true` for authorization followed by capture/void. `LunixiResponse` preserves `StatusCode`, full `Envelope`, `Data` and `RequestId`, including pagination metadata. A pending status or HTTP 202 is not proof of payment.
 
-| Surface | .NET 0.1.1 |
+| Surface | .NET 1.0.1 |
 | --- | --- |
 | Hosted intents, payment status/list/capture/refund/void/methods | `lunixi.Payments` |
 | Split create/status/list/refund and customer actions | `SplitPaymentRequest`, `lunixi.Payments` |

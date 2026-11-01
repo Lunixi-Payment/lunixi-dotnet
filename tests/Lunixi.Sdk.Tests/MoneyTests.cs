@@ -2,6 +2,7 @@ using System.Text.Json;
 using Lunixi;
 using Xunit;
 namespace Lunixi.Sdk.Tests;
+
 public class MoneyTests
 {
     [Fact]

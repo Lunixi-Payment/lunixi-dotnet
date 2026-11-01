@@ -1,24 +1,24 @@
 # .NET / C# SDK
 
-**[Lunixi.Sdk 0.1.1 NuGet’te yayımlandı](https://www.nuget.org/packages/Lunixi.Sdk/0.1.1)**. Herkese açık paketin içeriği, kaynak commit’i ve NuGet katalog SHA-512 özeti 31 Ekim 2026’da doğrulandı.
+1.0.1 para alanlarını kanonik küçük birim string olarak taşır. [Geçiş rehberini](../MIGRATION-1.0.md) uygulayın.
 
-0.1.1 sürümü mağaza sitesi için somut bir sunum örneği içerir. **Varsayılan gömülü ödemedir**: yalnız resmi Lunixi bundle yüklenir ve mevcut form mount edilir; yöntem ve çoklu kart seçenekleri Lunixi panelinde kalır. İsteğe bağlı yönlendirme yalnız backend `paymentPageUrl` adresini, tam HTTPS `pay.lunixi.com/payment/` doğrulamasından sonra kullanır. Adresin token’ı gömülü token’dan farklı olabilir. Eksik adres gömülü ödemeyi engellemez; yönlendirme aynı deneme/anahtarla inceleme veya uzlaştırmada kalır. Tarayıcı token’ından adres üretmeyin. Formdan önce müşteri/sipariş sahipliğini ve yerel tarayıcı CSRF’yi doğrulayın; `Cache-Control: private, no-store` gönderin, mağazanın CSP nonce değerini koruyun; token, HTML ve yönlendirme adreslerini loglamayın. Genel yanıt verisi `paymentPageUrl` alanını korur; yeni tipli ürün eşitliği iddiası yoktur.
+1.0.1 sürümü mağaza sitesi için somut bir sunum örneği içerir. **Varsayılan gömülü ödemedir**: yalnız resmi Lunixi bundle yüklenir ve mevcut form mount edilir; yöntem ve çoklu kart seçenekleri Lunixi panelinde kalır. İsteğe bağlı yönlendirme yalnız backend `paymentPageUrl` adresini, tam HTTPS `pay.lunixi.com/payment/` doğrulamasından sonra kullanır. Adresin token’ı gömülü token’dan farklı olabilir. Eksik adres gömülü ödemeyi engellemez; yönlendirme aynı deneme/anahtarla inceleme veya uzlaştırmada kalır. Tarayıcı token’ından adres üretmeyin. Formdan önce müşteri/sipariş sahipliğini ve yerel tarayıcı CSRF’yi doğrulayın; `Cache-Control: private, no-store` gönderin, mağazanın CSP nonce değerini koruyun; token, HTML ve yönlendirme adreslerini loglamayın. Genel yanıt verisi `paymentPageUrl` alanını korur; yeni tipli ürün eşitliği iddiası yoktur.
 
-`Lunixi.Sdk` 0.1.1; Ed25519 imza, token önbelleği, ödeme formu intent'i, ödeme işlemleri, parçalı ödeme DTO doğrulaması, fraud istemcileri ve ham gövdeden webhook doğrulaması sağlar. .NET 8 ve üzerindeki ASP.NET Core, arka plan servisi ve diğer sunucu uygulamalarını destekler.
+`Lunixi.Sdk` 1.0.1; Ed25519 imza, token önbelleği, ödeme formu intent'i, ödeme işlemleri, parçalı ödeme DTO doğrulaması, fraud istemcileri ve ham gövdeden webhook doğrulaması sağlar. .NET 8 ve üzerindeki ASP.NET Core, arka plan servisi ve diğer sunucu uygulamalarını destekler.
 
 ## Kurulum
 
-Uygulamanıza yayımlanmış tam [NuGet sürümünü](https://www.nuget.org/packages/Lunixi.Sdk/0.1.1) ekleyin:
+1.0.1 [NuGet](https://www.nuget.org/packages/Lunixi.Sdk) üzerinde kullanılabilir olduğunda uygulamanıza ekleyin:
 
 ```bash
-dotnet add package Lunixi.Sdk --version 0.1.1 --source https://api.nuget.org/v3/index.json
+dotnet add package Lunixi.Sdk --version 1.0.1 --source https://api.nuget.org/v3/index.json
 ```
 
 Kaynak geliştirmesi için [Lunixi-Payment/lunixi-dotnet](https://github.com/Lunixi-Payment/lunixi-dotnet) kullanılabilir. SDK klasöründen yerel paket de üretilebilir:
 
 ```bash
 dotnet pack src/Lunixi.Sdk/Lunixi.Sdk.csproj -c Release -o artifacts
-dotnet add /path/to/YourApp.csproj package Lunixi.Sdk --version 0.1.1 --source /absolute/path/to/sdk/artifacts
+dotnet add /path/to/YourApp.csproj package Lunixi.Sdk --version 1.0.1 --source /absolute/path/to/sdk/artifacts
 ```
 
 Bağımlılıklar için normal NuGet kaynağınızı açık tutun veya SDK projesini doğrudan referans ekleyin. Ed25519, NSec/libsodium ve sunucu ortamına uygun yerel kitaplıklarla çalışır. Tarayıcı/WASM desteklenmez. Örnek ve test sunucusu .NET 8 çalışma zamanını kullanır.
@@ -48,7 +48,7 @@ var token = response.Data.GetProperty("token").GetString();
 
 Uygulama başına tek istemci oluşturun; kapanışta dispose edin. TEST/LIVE ortamını anahtar belirler. Açık Ed25519 anahtarını panelde kaydedin; PKCS#8 PEM özel anahtarı yalnız sunucuda tutun. `Ed25519Signer.GenerateKeyPair()` ikisini de üretir. → [Kimlik doğrulama](/getting-started/authentication)
 
-Tutarlar pozitif tam sayı alt birimdir: `10050` = 100,50 TRY. Tutarı sipariş veritabanından okuyun. Sepet `Price` değeri satırın tamamının tutarıdır; satır toplamı `Amount` ile eşit olmalıdır. Eski üst düzey tutar alanları reddedilir. Akış gerektiriyorsa alıcı/fatura/teslimat JSON bilgisini güvenilir sunucu kaydından ekleyin.
+Tutarlar pozitif kanonik alt birim string değerleridir: `"10050"` = 100,50 TRY. Tutarı sipariş veritabanından okuyun. Sepet `Price` değeri satırın tamamının tutarıdır; satır toplamı `Amount` ile eşit olmalıdır. Eski üst düzey tutar alanları reddedilir. Akış gerektiriyorsa alıcı/fatura/teslimat JSON bilgisini güvenilir sunucu kaydından ekleyin.
 
 Token'ı mevcut [Lunixi Ödeme Formu](/payments/checkout-form) entegrasyonuna aktarın. Açık yöntemleri ve alıcı etkileşimlerini form yürütür. SDK kart alanlarını yeniden üretmez; varsayılan olarak ham kartla tahsilat açmaz. Tarayıcı dönüşü bilgilendirmedir; teslimat kararı doğrulanmış webhook ve kimliği doğrulanmış durum sorgusuna dayanır.
 
@@ -74,7 +74,7 @@ var methods = await lunixi.Payments.ListMethodsAsync();
 
 Ön provizyon için `CreateIntentRequest.Preauth = true` kullanın; sonra capture/void çağırın. `LunixiResponse`, `StatusCode`, tam `Envelope`, `Data` ve `RequestId` değerlerini; sayfalama bilgisi dahil korur. Bekleyen durum veya HTTP 202 kesin ödeme başarısı değildir.
 
-| Yüzey | .NET 0.1.1 |
+| Yüzey | .NET 1.0.1 |
 | --- | --- |
 | Form intent'i, ödeme durum/liste/capture/refund/void/yöntemler | `lunixi.Payments` |
 | Parçalı ödeme oluşturma/durum/liste/iade ve alıcı aksiyonları | `SplitPaymentRequest`, `lunixi.Payments` |

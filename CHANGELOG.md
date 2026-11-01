@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1 — 2026-11-01
+
+- Apply the release formatting corrections required by CI; preserve the money-string API and update 1.0.1 installation guidance.
+
 ## 1.0.0 — 2026-11-01
 
 - Reject explicit null capture/refund amounts; full remaining operations use omission or the dedicated API described in MIGRATION-1.0.md.
