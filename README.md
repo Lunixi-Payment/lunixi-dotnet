@@ -19,7 +19,7 @@ Server-side Lunixi integration for .NET 8 or newer: Ed25519 authentication, chec
 
 ## Installation
 
-Install the exact package after version 1.0.1 is available on NuGet:
+Install the published [Lunixi.Sdk 1.0.1 package from NuGet](https://www.nuget.org/packages/Lunixi.Sdk/1.0.1):
 
 ```bash
 dotnet add package Lunixi.Sdk --version 1.0.1 --source https://api.nuget.org/v3/index.json
