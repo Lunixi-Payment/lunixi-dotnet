@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.0 — 2026-11-04
+
+- `CreateIntentRequest.EnabledInstallments` (`IReadOnlyList<int>?`, sent as `enabledInstallments`): the installment counts the hosted form may offer for one payment (`[1]` = single payment only). It only narrows the panel settings, the card and the platform maximum; null means no restriction. `CreateIntentAsync` throws `LunixiConfigurationException` before any request for an empty list, a count outside 1–36, a duplicate or a list without 1; the list is serialized in ascending order without changing the request.
+
 ## 1.0.1 — 2026-11-01
 
 - Apply the release formatting corrections required by CI; preserve the money-string API and update 1.0.1 installation guidance.

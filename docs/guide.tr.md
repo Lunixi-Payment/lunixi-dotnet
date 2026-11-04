@@ -39,6 +39,7 @@ var request = new CreateIntentRequest("10050", "TRY", "ORDER-1001")
 {
     CallbackUrl = new Uri("https://merchant.example/payments/return"),
     BasketItems = [new BasketItem("SKU-1", "Örnek ürün", "10050")],
+    EnabledInstallments = [1, 2, 3], // isteğe bağlı: en fazla 3 taksit
 };
 // Anahtarı kalıcı ödeme denemesinden okuyun; ağ hatasından sonra aynı anahtarı kullanın.
 var response = await lunixi.Payments.CreateIntentAsync(request, persistedAttemptKey);
@@ -49,6 +50,8 @@ var token = response.Data.GetProperty("token").GetString();
 Uygulama başına tek istemci oluşturun; kapanışta dispose edin. TEST/LIVE ortamını anahtar belirler. Açık Ed25519 anahtarını panelde kaydedin; PKCS#8 PEM özel anahtarı yalnız sunucuda tutun. `Ed25519Signer.GenerateKeyPair()` ikisini de üretir. → [Kimlik doğrulama](/getting-started/authentication)
 
 Tutarlar pozitif kanonik alt birim string değerleridir: `"10050"` = 100,50 TRY. Tutarı sipariş veritabanından okuyun. Sepet `Price` değeri satırın tamamının tutarıdır; satır toplamı `Amount` ile eşit olmalıdır. Eski üst düzey tutar alanları reddedilir. Akış gerektiriyorsa alıcı/fatura/teslimat JSON bilgisini güvenilir sunucu kaydından ekleyin.
+
+`EnabledInstallments` bu ödeme için formun sunacağı taksit sayılarını yalnızca daraltır (`[1]` = yalnız tek çekim); form, panel ayarlarınızın, kartın ve platform üst sınırının da izin verdiği sayıları gösterir, null kısıt yok demektir. Sayılar 1–36 arası, tekrarsız olmalı ve 1'i içermelidir; aksi hâlde `CreateIntentAsync` istek göndermeden `LunixiConfigurationException` fırlatır. Liste `enabledInstallments` olarak artan sırada gönderilir.
 
 Token'ı mevcut [Lunixi Ödeme Formu](/payments/checkout-form) entegrasyonuna aktarın. Açık yöntemleri ve alıcı etkileşimlerini form yürütür. SDK kart alanlarını yeniden üretmez; varsayılan olarak ham kartla tahsilat açmaz. Tarayıcı dönüşü bilgilendirmedir; teslimat kararı doğrulanmış webhook ve kimliği doğrulanmış durum sorgusuna dayanır.
 

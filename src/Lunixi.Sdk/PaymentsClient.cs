@@ -30,6 +30,15 @@ public sealed class CreateIntentRequest
     public IReadOnlyDictionary<string, object?>? Metadata { get; init; }
     /// <summary>An optional merchant description.</summary>
     public string? Description { get; init; }
+    /// <summary>
+    /// The installment counts the hosted form may offer for this payment, for example <c>[1, 2, 3]</c>;
+    /// <c>[1]</c> allows a single payment only. The form shows only the counts also allowed by your panel
+    /// settings, the card and the platform maximum; null means no restriction. Counts are 1–36, distinct and
+    /// include 1, otherwise <see cref="PaymentsClient.CreateIntentAsync"/> throws
+    /// <see cref="LunixiConfigurationException"/> before any request. Sent as <c>enabledInstallments</c> in ascending order.
+    /// </summary>
+    [JsonConverter(typeof(AscendingInstallmentsConverter))]
+    public IReadOnlyList<int>? EnabledInstallments { get; init; }
     /// <summary>Creates a hosted payment request without collecting card data on the merchant server.</summary>
     public CreateIntentRequest(string amount, string currency, string orderId)
     {
@@ -42,6 +51,7 @@ public sealed class CreateIntentRequest
         if (CallbackUrl is not null) RequestValidation.Https(CallbackUrl);
         if (CustomerId is not null) RequestValidation.Text(CustomerId, "customerId", 256);
         if (Description is not null) RequestValidation.Text(Description, "description", 1024);
+        if (EnabledInstallments is not null) RequestValidation.EnabledInstallments(EnabledInstallments);
         foreach (var item in new[] { Buyer, BillingAddress, ShippingAddress })
             if (item is { } value && value.ValueKind != JsonValueKind.Object)
                 throw new LunixiConfigurationException("Buyer and address values must be JSON objects.");
@@ -188,8 +198,39 @@ public sealed class PaymentsClient
     }
 }
 
+/// <summary>Writes an installment-count list in ascending order without changing the request.</summary>
+internal sealed class AscendingInstallmentsConverter : JsonConverter<IReadOnlyList<int>>
+{
+    public override IReadOnlyList<int>? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        => JsonSerializer.Deserialize<int[]>(ref reader, options);
+    public override void Write(Utf8JsonWriter writer, IReadOnlyList<int> value, JsonSerializerOptions options)
+    {
+        writer.WriteStartArray();
+        foreach (var count in value.Order()) writer.WriteNumberValue(count);
+        writer.WriteEndArray();
+    }
+}
+
 internal static class RequestValidation
 {
+    internal const int MinEnabledInstallment = 1;
+    internal const int MaxEnabledInstallment = 36;
+    /// <summary>A non-empty list of distinct counts from 1 to 36 that contains 1. A duplicate is an error; it is not removed.</summary>
+    internal static void EnabledInstallments(IReadOnlyList<int> counts)
+    {
+        if (counts.Count == 0)
+            throw new LunixiConfigurationException("EnabledInstallments must not be empty; use null for no restriction or [1] for a single payment only.");
+        var seen = new HashSet<int>();
+        foreach (var count in counts)
+        {
+            if (count is < MinEnabledInstallment or > MaxEnabledInstallment)
+                throw new LunixiConfigurationException($"EnabledInstallments values must be from {MinEnabledInstallment} to {MaxEnabledInstallment}.");
+            if (!seen.Add(count))
+                throw new LunixiConfigurationException($"EnabledInstallments has {count} more than once.");
+        }
+        if (!seen.Contains(MinEnabledInstallment))
+            throw new LunixiConfigurationException("EnabledInstallments must contain 1 (single payment).");
+    }
     internal static void Currency(string currency)
     {
         if (currency is null || currency.Length != 3 || currency.Any(c => !char.IsAsciiLetterUpper(c)))

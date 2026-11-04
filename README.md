@@ -67,6 +67,7 @@ var request = new CreateIntentRequest("10050", "TRY", "ORDER-1001")
 {
     CallbackUrl = new Uri("https://merchant.example/payments/return"),
     BasketItems = [new BasketItem("SKU-1", "Demo product", "10050")],
+    EnabledInstallments = [1, 2, 3], // optional: at most 3 installments
 };
 
 // Persist this key with the checkout attempt BEFORE the first gateway request.
@@ -76,6 +77,8 @@ var checkoutToken = result.Data.GetProperty("token").GetString();
 ```
 
 Use your server's order amount. `10050` means 100.50 TRY. All typed payment amounts are positive canonical minor-unit strings, capped at the signed 64-bit fiat limit. Basket item `Price` is the entire line total, and line totals must equal `Amount`. Root `price` / `paidPrice` fields are rejected, including through generic transport; basket `price` remains valid. Supply buyer/billing/shipping JSON from trusted server records when your flow requires them. No raw-card charge API is enabled by default.
+
+`EnabledInstallments` only narrows the installment counts the hosted form offers for this payment (`[1]` = single payment only); the form shows only the counts your panel settings, the card and the platform maximum also allow, and null means no restriction. Counts are 1–36, distinct and include 1, otherwise `CreateIntentAsync` throws `LunixiConfigurationException` before any request; the list is sent as `enabledInstallments` in ascending order.
 
 Pass the token to the existing Lunixi Checkout Form integration according to the [checkout documentation](https://docs.lunixi.com/en/payments/checkout-form). The SDK does not recreate card fields or the shared form. Browser callbacks are informational; use verified webhooks and authenticated status reads to decide fulfillment.
 

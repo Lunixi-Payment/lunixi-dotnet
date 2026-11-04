@@ -32,6 +32,7 @@ var request = new CreateIntentRequest("10050", "TRY", "ORDER-1001")
 {
     CallbackUrl = new Uri("https://merchant.example/payments/return"),
     BasketItems = [new BasketItem("SKU-1", "Demo product", "10050")],
+    EnabledInstallments = [1, 2, 3], // optional: at most 3 installments
 };
 // Load this key from a persisted checkout attempt; reuse it after network failures.
 var response = await lunixi.Payments.CreateIntentAsync(request, persistedAttemptKey);
@@ -42,6 +43,8 @@ var token = response.Data.GetProperty("token").GetString();
 Register one client per application and dispose it during shutdown. The key determines TEST/LIVE. Register the public Ed25519 key in the dashboard; keep the PKCS#8 PEM private key on your server. `Ed25519Signer.GenerateKeyPair()` generates both. → [Authentication](/getting-started/authentication)
 
 Amounts are positive canonical minor-unit strings: `"10050"` = 100.50 TRY. Read prices from your order database. Basket `Price` is the complete line total; line totals must equal `Amount`. Legacy top-level amount fields are rejected. Provide buyer/billing/shipping JSON from trusted server records when your checkout requires them.
+
+`EnabledInstallments` only narrows the installment counts the hosted form offers for this payment (`[1]` = single payment only); the form shows only the counts your panel settings, the card and the platform maximum also allow, and null means no restriction. Counts are 1–36, distinct and include 1, otherwise `CreateIntentAsync` throws `LunixiConfigurationException` before any request; the list is sent as `enabledInstallments` in ascending order.
 
 Pass the token to the existing [Lunixi Checkout Form](/payments/checkout-form). The form handles enabled methods and buyer interactions. The SDK does not recreate card fields or enable raw-card charging by default. Browser returns are informational; fulfillment depends on verified webhooks and authenticated status reads.
 
