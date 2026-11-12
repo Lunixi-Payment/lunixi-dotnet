@@ -86,6 +86,12 @@ public sealed class BasketItem
     public string? Category1 { get; init; }
     /// <summary>The item's secondary category.</summary>
     public string? Category2 { get; init; }
+    /// <summary>
+    /// Optional Lunixi product category code, sent as <c>productCategory</c>; use a <see cref="ProductCategories"/>
+    /// constant. Used by payment methods with legal installment limits (e.g. shopping loan) and other platform
+    /// features. Null omits the field; an unknown code is rejected by the API.
+    /// </summary>
+    public string? ProductCategory { get; init; }
     /// <summary>Creates one validated basket line.</summary>
     public BasketItem(string id, string name, string price, string itemType = "PHYSICAL")
     {

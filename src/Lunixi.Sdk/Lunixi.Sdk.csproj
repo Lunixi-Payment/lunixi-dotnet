@@ -7,7 +7,7 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <AnalysisLevel>latest</AnalysisLevel>
     <PackageId>Lunixi.Sdk</PackageId>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <Authors>Lunixi</Authors>
     <Description>Lunixi server-side .NET SDK: signed requests, hosted payment intents, payment operations, fraud and verified webhooks.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
