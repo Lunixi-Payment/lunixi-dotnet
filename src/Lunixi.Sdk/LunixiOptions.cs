@@ -53,11 +53,14 @@ internal static class Validation
         if (string.IsNullOrWhiteSpace(value) || value.Length > 512 || value.Any(c => c < 0x21 || c > 0x7e))
             throw new LunixiConfigurationException($"{field} must contain printable ASCII without whitespace.");
     }
-    internal static void IdempotencyKey(string key)
+    internal const int MaxIdempotencyKeyLength = 128;
+    /// <summary>Longest <c>Idempotency-Key</c> the payment-link routes accept.</summary>
+    internal const int MaxPaymentLinkIdempotencyKeyLength = 200;
+    internal static void IdempotencyKey(string key, int maxLength = MaxIdempotencyKeyLength)
     {
         HeaderValue(key, "Idempotency-Key");
-        if (key.Length is < 8 or > 128)
-            throw new LunixiConfigurationException("Idempotency-Key must contain 8–128 characters and identify one persisted operation.");
+        if (key.Length < 8 || key.Length > maxLength)
+            throw new LunixiConfigurationException($"Idempotency-Key must contain 8–{maxLength} characters and identify one persisted operation.");
     }
     internal static void Amount(string amount) => Money.Parse(amount, positive: true);
     internal static string Id(string id)

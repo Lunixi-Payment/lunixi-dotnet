@@ -24,20 +24,43 @@ public class LunixiApiException : Exception
         StatusCode = status; Code = Validation.SafeIdentifier(code); RequestId = Validation.SafeIdentifier(requestId);
         Response = response; RetryAfterSeconds = retryAfter;
     }
+    private protected LunixiApiException(string message, int status, string? code) : base(message)
+    { StatusCode = status; Code = Validation.SafeIdentifier(code); }
+    private protected LunixiApiException(string message, int status, string? code, string? requestId, JsonElement? response,
+        double? retryAfter, Exception? innerException) : base(message, innerException)
+    {
+        StatusCode = status; Code = Validation.SafeIdentifier(code); RequestId = Validation.SafeIdentifier(requestId);
+        Response = response; RetryAfterSeconds = retryAfter;
+    }
+}
+
+/// <summary>
+/// The storage host refused a payment-link image upload (the presigned PUT). <see cref="LunixiApiException.Code"/> is the
+/// storage error code when one was sent, for example <c>AccessDenied</c> once the upload URL has expired. Request a new
+/// upload target and upload again.
+/// </summary>
+public sealed class LunixiStorageUploadException : LunixiApiException
+{
+    internal LunixiStorageUploadException(int status, string? code)
+        : base($"Image upload to storage failed with HTTP {status}. Request a new upload target and upload again.", status, code) { }
 }
 
 /// <summary>A gateway HTTP 400 or 422 response; inspect Response explicitly for validation details.</summary>
-public sealed class LunixiValidationException : LunixiApiException
+public class LunixiValidationException : LunixiApiException
 {
     internal LunixiValidationException(int status, string? code, string? requestId, JsonElement? response)
         : base(status, code, requestId, response) { }
+    private protected LunixiValidationException(string message, int status, string? code, string? requestId, JsonElement? response, Exception? innerException)
+        : base(message, status, code, requestId, response, null, innerException) { }
 }
 
 /// <summary>A gateway HTTP 429 response. The SDK does not automatically retry rate limits.</summary>
-public sealed class LunixiRateLimitException : LunixiApiException
+public class LunixiRateLimitException : LunixiApiException
 {
     internal LunixiRateLimitException(string? code, string? requestId, JsonElement? response, double? retryAfter)
         : base(429, code, requestId, response, retryAfter) { }
+    private protected LunixiRateLimitException(string message, string? code, string? requestId, JsonElement? response, double? retryAfter, Exception? innerException)
+        : base(message, 429, code, requestId, response, retryAfter, innerException) { }
 }
 
 /// <summary>A network failure, timeout, redirect or malformed gateway response.</summary>

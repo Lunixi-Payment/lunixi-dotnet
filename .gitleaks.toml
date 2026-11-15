@@ -41,3 +41,11 @@ targetRules = ["generic-api-key"]
 paths = ['''(?:^|/)tests/Lunixi\.Sdk\.Tests/WebhookTests\.cs$''']
 regexTarget = "line"
 regexes = ['''\A\s*\Qprivate const string Secret = "whsec_testsecret_0123456789abcdef";\E\s*\z'''] # gitleaks:allow
+
+[[allowlists]]
+description = "Synthetic UUID in the shared Physical POS idempotency-key cases only"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''(?:^|/)tests/Lunixi\.Sdk\.Tests/Fixtures/physical\-pos\-parity\.json$''']
+regexTarget = "secret"
+regexes = ['''\A7b0c6a1e\-2f8d\-4c55\-9a51\-3f0e8d1c2a90\z''']

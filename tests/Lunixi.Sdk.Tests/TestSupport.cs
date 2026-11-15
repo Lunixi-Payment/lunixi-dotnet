@@ -57,3 +57,30 @@ internal sealed class MemoryReplayStore : IWebhookReplayStore
         return ValueTask.CompletedTask;
     }
 }
+
+/// <summary>One request seen by <see cref="RecordingClient"/>, with every request and content header name.</summary>
+internal sealed record RecordedRequest(string Method, Uri Uri, string? Body, byte[]? Bytes, IReadOnlyDictionary<string, string> Headers)
+{
+    public string PathAndQuery => Uri.PathAndQuery;
+    public bool Signed => Headers.ContainsKey("X-Signature") && Headers.ContainsKey("X-Key-Id");
+    public string? IdempotencyKey => Headers.TryGetValue("Idempotency-Key", out var key) ? key : null;
+}
+
+/// <summary>A client on a fake transport that answers the token call itself and records every other request.</summary>
+internal static class RecordingClient
+{
+    public static (LunixiClient Client, List<RecordedRequest> Requests) Create(Func<HttpRequestMessage, HttpResponseMessage>? respond = null)
+    {
+        var requests = new List<RecordedRequest>();
+        var client = new LunixiClient(TestOptions.Create(retries: 0), new FakeHandler(async (request, ct) =>
+        {
+            if (request.RequestUri!.AbsolutePath == "/api/v1/auth/token") return FakeHandler.Json("{\"access_token\":\"token\"}");
+            var headers = request.Headers.Concat(request.Content?.Headers ?? Enumerable.Empty<KeyValuePair<string, IEnumerable<string>>>())
+                .ToDictionary(h => h.Key, h => string.Join(", ", h.Value), StringComparer.OrdinalIgnoreCase);
+            var bytes = request.Content is null ? null : await request.Content.ReadAsByteArrayAsync(ct);
+            requests.Add(new(request.Method.Method, request.RequestUri, bytes is null ? null : Encoding.UTF8.GetString(bytes), bytes, headers));
+            return respond?.Invoke(request) ?? FakeHandler.Json();
+        }));
+        return (client, requests);
+    }
+}

@@ -158,3 +158,33 @@ public sealed class WebhookProcessor(WebhookVerifier verifier, IWebhookReplaySto
         }
     }
 }
+
+/// <summary>Readers shared by the typed webhook payloads.</summary>
+internal static class WebhookData
+{
+    /// <summary>The non-empty <c>data</c> object of the envelope.</summary>
+    internal static JsonElement Payload(LunixiWebhook verified)
+    {
+        if (verified.Envelope.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Object && data.EnumerateObject().Any()) return data;
+        throw new LunixiWebhookException("The webhook carries no data payload.");
+    }
+
+    /// <summary>A non-empty string member, or null.</summary>
+    internal static string? Text(JsonElement owner, string name) => LunixiClient.Property(owner, name) is { Length: > 0 } text ? text : null;
+
+    internal static string Required(JsonElement owner, string name)
+        => Text(owner, name) ?? throw new LunixiWebhookException($"The webhook payload has no {name}.");
+
+    /// <summary>A canonical minor-unit string; a JSON number or malformed text throws. Absent or null is allowed unless <paramref name="required"/>.</summary>
+    internal static string? Money(JsonElement owner, string name, bool required)
+    {
+        if (!owner.TryGetProperty(name, out var value) || value.ValueKind == JsonValueKind.Null)
+            return required ? throw new LunixiWebhookException($"The webhook payload has no {name}.") : null;
+        if (value.ValueKind == JsonValueKind.String)
+        {
+            try { Lunixi.Money.Parse(value.GetString()!); return value.GetString(); }
+            catch (LunixiConfigurationException) { }
+        }
+        throw new LunixiWebhookException($"The webhook payload carries a non-canonical {name}.");
+    }
+}

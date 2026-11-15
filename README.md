@@ -92,30 +92,253 @@ var released = await lunixi.Payments.VoidAsync(paymentId, persistedVoidKey);
 var methods = await lunixi.Payments.ListMethodsAsync();
 ```
 
+`ListMethodsAsync("MOBILE_BILLING")` narrows the list to one method (`QR` is sent as `QR_CODE`). Each method lists its providers and the `inputFields` to send; always read the provider code from this response.
+
+### Payments with any method
+
+`DirectMethodPaymentAsync` starts a payment with any enabled method. Build the body with `DirectMethodPaymentRequest`; the idempotency key is required.
+
+```csharp
+var request = new DirectMethodPaymentRequest("10000", "TRY", "ORDER-1001")
+    .WithMethodFields(PaymentMethods.MobileBilling, providerCode, new { gsmNumber = "+905321234567" })
+    .WithCallbackUrl(new Uri("https://shop.example/payments/return"));
+var started = await lunixi.Payments.DirectMethodPaymentAsync(request, persistedPaymentKey);
+// HTTP 202 with data.action: OTP → ConfirmActionAsync(paymentId, actionId, new { otp = "123456" })
+```
+
+The SDK sends only the chosen method's block (`PaymentMethodFields.MethodBlocks`), keeps card fields (`card`, `installment`, `installmentQuoteToken`, `force3D`) for `WithCard`, checks the block structure (at most 32 fields; text, numbers, booleans, `ADDRESS` objects and `GROUP` lists) and throws `LunixiConfigurationException` before any request. A shopping loan needs 1–100 `BasketItems`. A raw JSON body can be passed to the `object` overload and goes through the same checks.
+
+**Bank transfer.** `WithMethodFields(PaymentMethods.BankTransfer, null, new { bankCode = "0062" })` sends `bankTransfer: { bankCode }` and never a provider code; `BankTransferValues.OtherBanksCode` (`"9999"`) is the "Other banks" option. The response carries a `DISPLAY` action; `BankTransferInstruction.FromResponse(started)` returns the account, amount and payment code to show the buyer (null without such an action). The outcome arrives as `payment.captured` / `payment.failed`; `PaymentBankTransferEvents` lists the transfer events. Late, short and excess transfers are listed with `ListBankTransferExceptionsAsync(new BankTransferExceptionFilters { Status = BankTransferExceptionStatuses.PendingDecision })` and decided with `AcceptBankTransferExceptionAsync` or `MarkBankTransferExceptionRefundedAsync`.
+
+**Promissory notes.** Give the plan with `WithPromissoryNoteSchedule([new("5000", "2027-01-15"), new("5000", "2027-02-15")])` (1–24 rows in due-date order adding up to the amount) or `WithPromissoryNoteCount(2)`, never both. Read the notes with `GetPromissoryNotesAsync`, cancel them with `CancelPromissoryNotesAsync` and download the printable PDF with `DownloadPromissoryNoteDocumentAsync(paymentId, PromissoryNoteDocumentLocales.Turkish)`, which returns `LunixiBinaryResponse` (`Content`, `ContentType`). `PromissoryNoteEvents` lists the note webhooks.
+
+**Addresses.** `ADDRESS` fields take codes from `lunixi.Reference.ListProvincesAsync()`, `ListDistrictsAsync("06")` and `ListNeighborhoodsAsync(districtCode)`.
+
 `LunixiResponse.StatusCode`, `.Envelope`, `.Data` and `.RequestId` preserve pending states and pagination metadata. A 202 or a pending status is not proof of payment. Preauthorization uses `CreateIntentRequest.Preauth = true`, then capture or void.
 
-Split APIs: `CreateSplitAsync`, `GetSplitAsync`, `ListSplitsAsync`, `RefundSplitAsync`. `SplitPaymentRequest` accepts the documented JSON DTO, validates 1–5 legs, exact `totalAmount`, distinct stored-card/provider references, allowed method fields, installment quotes and required 3DS callback. Use stored-card tokens; never raw card numbers. Action APIs are `ConfirmActionAsync` and `ResendActionAsync`. Documented in-progress HTTP 400 split responses are returned as `LunixiResponse`; failed/reconciliation states remain exceptions. **Split endpoint availability depends on gateway rollout and merchant capabilities. Source support does not assert live availability.** The same split request and operation key must be reused to continue the saga.
+Split APIs: `CreateSplitAsync`, `GetSplitAsync`, `ListSplitsAsync`, `RefundSplitAsync`. `SplitPaymentRequest` accepts the documented JSON DTO, validates 1–5 legs, exact `totalAmount`, distinct stored-card/provider references, allowed method fields, installment quotes and required 3DS callback. Use stored-card tokens; never raw card numbers. A non-card leg carries one of `SplitPaymentFields.LegBlocks` (`mobileBilling`, `wallet`, `promissoryNote`); meal card, open banking, shopping loan and bank transfer cannot be split legs. `SplitPaymentEvents` lists the split webhooks; add `SplitPaymentEvents.LegEventsSubscription` to an endpoint to also receive leg events. Action APIs are `ConfirmActionAsync` and `ResendActionAsync`. Documented in-progress HTTP 400 split responses are returned as `LunixiResponse`; failed/reconciliation states remain exceptions. **Split endpoint availability depends on gateway rollout and merchant capabilities. Source support does not assert live availability.** The same split request and operation key must be reused to continue the saga.
+
+### Cards, installments and marketplace intents
+
+```csharp
+var bin = await lunixi.Payments.BinInfoAsync("45438712");
+var table = await lunixi.Payments.InstallmentOptionsAsync(new InstallmentOptionsRequest("10000", "TRY")
+{
+    BinOrPan = "45438712", Installment = 3, EnabledInstallments = [1, 2, 3],
+});
+var taxonomy = await lunixi.Payments.CardTaxonomyAsync();
+```
+
+`InstallmentOptionsAsync` returns the table and, for an installment count above one with a BIN, the `quoteToken` that `DirectMethodPaymentRequest.WithInstallment(count, quoteToken)` needs. `EnabledInstallments` follows the intent rule (1–36, distinct, 1 included, sent ascending). A BIN or PAN prefix must be 6–19 digits and is never placed in an exception message.
+
+Stored cards: `StoreCardAsync(new StoreCardRequest(card, cardUserKey, callbackUrl), persistedKey)` (signed, idempotency key required) returns the `storedCardToken`; `ListStoredCardsAsync(cardUserKey)`, `GetStoredCardAsync(storedCardToken)` and `DeactivateStoredCardAsync(storedCardToken, persistedKey)` (signed, key required) manage them. `StoreCardRequest.ToString()` redacts the card.
+
+`CreateMarketplaceIntentAsync(intent, [new MarketplaceSeller("dealer-a", "10000"), new MarketplaceSeller("dealer-b", "5000")], persistedKey, MarketplaceSellerPolicies.AllOrNothing)` adds `sellers[]` to the hosted intent body; the sellers' `amountMinor` values must add up exactly to the intent amount, otherwise the SDK throws before sending. Reports: `FailoverRecoveryAnalyticsAsync(filters)` and `ProviderCredentialAnalyticsAsync(credentialId, filters)`.
+
+## Payment links
+
+```csharp
+var link = await lunixi.PaymentLinks.CreateAsync(
+    CreatePaymentLinkRequest.Fixed(PaymentLinkUsages.SingleUse, "150000", "TRY", "Invoice 1001")
+        .WithRecipient(new Dictionary<string, string> { ["email"] = "buyer@example.com" })
+        .WithExpiresAt(DateTimeOffset.UtcNow.AddDays(7)),
+    persistedLinkKey);
+var linkId = link.Data.GetProperty("id").GetString()!;
+await lunixi.PaymentLinks.SendAsync(linkId, PaymentLinkDeliveryChannels.Email, persistedSendKey);
+```
+
+Every payment-link call is signed, reads included; the signing key decides the environment. `CreateAsync` and `SendAsync` require an idempotency key (8–200 printable characters). `UpdateAsync(linkId, expectedRowVersion, changes)` sends `{ expectedRowVersion, ...changes }` and rejects `usage`, `amountMode`, `currency` and unknown fields before sending; pass a `JsonObject` to clear a field with null. `PauseAsync`, `ResumeAsync`, `DeactivateAsync` (or `ActionAsync`), `GetAsync`, `ListAsync`, `ListAttemptsAsync` and `ListPaymentsAsync` cover the rest; `QrAsync(linkId, PaymentLinkQrFormats.Png, 512)` returns the QR image as `LunixiBinaryResponse`. `CreatePaymentLinkRequest.Open` and `.Itemized` (with `PaymentLinkItem`) build the other amount modes; `PaymentLinkCustomField` adds questions to the payment page.
+
+Link images take three steps, run together by `UploadImageAsync`:
+
+```csharp
+PaymentLinkImage image = await lunixi.PaymentLinks.UploadImageAsync("logo.png", PaymentLinkImageContentTypes.Png, bytes);
+// use image.AssetId as WithImageAssetId(...) of a link or an item
+```
+
+`CreateImageUploadAsync` returns a presigned storage target, the SDK PUTs the bytes there with **only** the returned upload headers (never the access token, the key identifier or the request signature) and `ConfirmImageUploadAsync` publishes the image after the gateway checks the stored bytes (PNG, JPEG or WebP, at most 2 MiB). A refused PUT throws `LunixiStorageUploadException` (for example `Code = "AccessDenied"` after the URL expired) and is not retried; upload again for a new target. Treat `PaymentLinkImageUpload.UploadUrl` as a credential until it expires.
+
+## Physical POS
+
+```csharp
+var key = PhysicalPosClient.NewIdempotencyKey();
+await orders.SavePosKeyAsync(orderId, key);                       // store the key first
+try
+{
+    PhysicalPosWriteResult started = await lunixi.PhysicalPos.CreatePaymentAsync(new
+    {
+        operation = PhysicalPosPaymentOperations.Sale,
+        target = new { deviceId = "dev_1" },
+        amountMinor = "4500",
+        currency = "TRY",
+        merchantReference = "ORDER-1001",
+        allowDuplicateReference = false,
+    }, key);
+    var paymentId = started.Payment!.Value.GetProperty("paymentId").GetString();   // 202: accepted, not paid
+}
+catch (PhysicalPosOutcomeUnknownException unknown)
+{
+    // The payment may exist: call again later with unknown.IdempotencyKey, never with a new key.
+}
+```
+
+`lunixi.PhysicalPos` starts payments on card terminals and reads them; `lunixi.PhysicalPosManagement` manages stores, registers, terminals, devices, device keys and the end-of-day policy. Every call is signed and the key decides the environment (a TEST key can only read). A payment write is asynchronous: follow the outcome with the `physical_pos.payment.*` webhooks or `GetPaymentAsync`. `CreatePaymentAsync` and `CreateReversalAsync` require your stored `Idempotency-Key` (8–200 printable ASCII characters, sent exactly as given) and return `PhysicalPosWriteResult`: 202 for a new payment, 200 with `Replayed` for the same key and body. The SDK retries a payment write itself with the same key and body; when any attempt got no answer, a 2xx without a payment or a 5xx that does not say "not started", the call throws `PhysicalPosOutcomeUnknownException`. Cancellation, end-of-day starts and keyed management creates accept your key or generate a UUID, returned as `IdempotencyKey`.
+
+Bodies are anonymous objects, dictionaries or `JsonObject` values (use a `JsonObject` or a dictionary to send `null` and clear a nullable field); money fields are minor-unit strings and counts are numbers. Filters are dictionaries: `ListPaymentsAsync(new Dictionary<string, object?> { ["limit"] = 50, ["createdFrom"] = DateTimeOffset.UtcNow.AddDays(-1) })`; `dateFrom` / `dateTo` of the reports accept a `DateOnly`. Unknown fields or filters, wrong JSON types and non-canonical amounts throw `LunixiConfigurationException` before sending. Card data is never sent: the card is read on the device, and a card-data field name or a card number in `merchantReference`, an item name or tax group, or the `merchantReference` / `q` filter throws `PhysicalPosCardDataRejectedException` with only the field path. A 429 is `PhysicalPosRateLimitException`; a void after end-of-day is `PhysicalPosVoidAfterSettlementException` (use a `REFUND`). Lists return `PhysicalPosPage` (`Items`, `HasMore`, `NextCursor`, `TotalCount` with `includeTotal`), and `Iterate…Async` walks every page.
+
+```csharp
+PhysicalPosWebhookEvent pos = PhysicalPosClient.ParseWebhookEvent(rawRequestBytes, requestHeaders, webhookSecret);
+// pos.Category: payment, fiscal_document, settlement or other; deduplicate by pos.Id and pos.HistorySeq per payment.
+```
+
+`ParseWebhookEvent` verifies the signature before reading the payload, checks its money fields, and exposes `Original` (a reversal's original payment and its origin), `Cashier` (set only for a payment started from a device cashier session), `IsDeviceSale` and `IsSettlementEvent`; end-of-day events carry no `HistorySeq`.
+
+## Wallet
+
+```csharp
+var endUser = await lunixi.Wallet.EndUsers.CreateAsync(new
+{
+    programId, accountType = WalletAccountTypes.Personal, phone = "+905551112233", externalCustomerId = "customer-1",
+}, persistedEndUserKey);
+
+var started = await lunixi.Wallet.Transfers.InitiateW2WAsync(new
+{
+    endUserId, sourceWalletAccountId, amount = "12550", currency = "TRY", destinationWalletNo = "1002003004",
+}, persistedTransferKey);
+await lunixi.Wallet.Transfers.CompleteW2WAsync(started.GetProperty("operationId").GetString()!, new
+{
+    endUserId, integrityHash = started.GetProperty("integrityHash").GetString(), nonce = started.GetProperty("nonce").GetString(), otpCode,
+}, persistedCompleteKey);
+```
+
+`lunixi.Wallet` covers the wallet's merchant routes through sub-clients: `Programs`, `EndUsers`, `Wallets`, `Deposits`, `Corporate`, `Fees`, `Transfers`, `Withdrawals`, `Operations`, `Topups`, `Payments`, `Qr` and `BulkPayouts`, plus `PingAsync`. Every call is signed, reads included. Each call is checked against `WalletRoutes` (method, path, key rule, body and query fields) before anything is sent: an unknown field or filter, a missing required field, an amount that is not a minor-unit digit string (`"12550"` is 125.50 TRY; numbers and decimals are refused, never rounded) or a missing `Idempotency-Key` on a route that requires one throws `LunixiConfigurationException`. Money moves in two steps: `Initiate…` reserves the limit and returns `operationId`, `integrityHash` and `nonce`; `Complete…` commits it and puts `operationId` into the body itself. Methods return the envelope's `data` as a `JsonElement`; lists return `LunixiPage` (`Items`, `HasMore`, `NextCursor`) and `IterateAsync` walks every page. `Qr.ImageAsync(qrId, WalletQrImageFormats.Png, 8)` returns the image as `LunixiBinaryResponse`.
+
+## Bank accounts, transfers and currency exchange
+
+```csharp
+var transactions = await lunixi.BankConnect.ListTransactionsAsync(new Dictionary<string, object?>
+{
+    ["accountId"] = new[] { accountId },
+    ["bookedFrom"] = DateTimeOffset.UtcNow.AddDays(-30),
+    ["direction"] = BankTransactionDirections.Credit,
+    ["limit"] = 100,
+});
+
+BankConnectWriteResult transfer = await lunixi.BankConnect.Transfers.CreateAsync(new
+{
+    accountId, receiverIban = "TR330006100519786457841326", receiverName = "Ayşe Yılmaz", amountMinor = "150075", description = "Invoice 1001",
+}, payoutId);
+```
+
+`lunixi.BankConnect` reads banks, connections, accounts, balances and transactions (`List…Async`, `Iterate…Async`, `Get…Async`) and asks for a fresh read with `RequestSyncAsync` (HTTP 202). Every call is signed and the key decides the environment; connecting a bank happens in the Lunixi dashboard only. Filters are checked before sending (`BankConnectFilters`): unknown filters, values outside their set, `limit` outside 1–100, more than 100 account ids, non-canonical amounts, `minAmountMinor` above `maxAmountMinor`, `bookedTo` without `bookedFrom` and windows wider than 92 days throw `LunixiConfigurationException`. Status and type filters take one value or a list.
+
+`Transfers` (`ListPurposesAsync`, `CreateAsync`, `ListAsync`, `IterateAsync`, `GetAsync`) and `Fx` (`ListRatesAsync`, `CreateQuoteAsync`, `CreateOrderAsync`, `ListOrdersAsync`, `IterateOrdersAsync`, `GetOrderAsync`) need the `bank-connect:transfer` scope and a key with an IP allowlist. `CreateAsync` and `CreateOrderAsync` check your `Idempotency-Key` (8–200 printable ASCII characters) or generate a UUID when you pass none, retry a network error or a 5xx with the same key, and return `BankConnectWriteResult` with the key used (`IdempotencyKey`), `Replayed` and the record (`Entity`). Pass your own key, such as your payout id, to retry safely across processes. Bodies are checked against `BankTransferRoutes`; a quote takes exactly one of `sourceAmountMinor` and `targetAmountMinor` and two different accounts. Read verified webhooks with `BankAccountTransactionReceivedData.FromWebhook` (`BankConnectEvents`) and `BankTransferWebhookData.FromWebhook` (`BankTransferEvents`, `bank_transfer.*`; distinct from the payment `payment.bank_transfer.*` events). Exchange orders have no webhook.
+
+## Sanctions screening
+
+```csharp
+var result = await lunixi.Sanction.ScreenNameAsync(new
+{
+    name = "Jane Doe", subjectType = SanctionSubjectTypes.Person, mode = SanctionScreenModes.SanctionsPep,
+});
+if (!SanctionClient.IsClearScreening(result)) { /* review the matches; the decision is yours */ }
+```
+
+`lunixi.Sanction` screens names, wallets, accounts, transactions, public procurement bans and adverse media, evaluates behavioural alerts, registers subjects for ongoing monitoring and reads alerts, matches, monitored entities, dataset freshness, entity intelligence and your deny list. Calls carry the access token only (no per-request signature) and need the `sanction:view_results` permission. Bodies and filters are checked against `SanctionRoutes` before sending, including the nested `identifiers`, `parties` and `accounts` lists, the `anyOf` groups and the value sets (`SanctionRoutes.ValueSets`). Screening returns matches, not verdicts: `IsClearScreening` is true only without any match or hit and, when the answer reports coverage, with `coverageStatus` `COMPLETE`. A screening that cannot run is HTTP 503 and throws; a 2xx answer that is not `status: "success"` throws `SanctionScreeningException`.
+
+## Insurance
+
+```csharp
+var quotes = await lunixi.Insurance.CreateQuoteAsync(new { insuranceType, currency = "TRY", paymentIntentId });
+var option = quotes.GetProperty("options")[0];
+var order = await lunixi.Insurance.CreateOrderAsync(new
+{
+    quoteId = option.GetProperty("quoteId").GetString(),
+    consent = InsuranceClient.ConsentFromQuote(option, acceptedAt),
+}, persistedOrderKey);
+BasketItem premiumItem = InsuranceClient.PremiumBasketItem(order, "Travel insurance", "Insurance");
+```
+
+`lunixi.Insurance` lists and searches products, reads reference codes, prices quotes, creates and reads orders, binds a Lunixi payment or records a premium collected outside Lunixi, requests, cancels and refunds policies, submits and reads leads, and reads reconciliation. Every call is signed. `CreateOrderAsync`, `ConfirmPaymentAsync`, `IssuePolicyAsync`, `CancelOrderAsync`, `RefundPremiumAsync` and `CreateLeadAsync` require an `Idempotency-Key` (8–200 printable ASCII characters); `CreateQuoteAsync` and `BindPaymentAsync` take one optionally. Top-level fields and filters are checked before sending (`InsuranceFields`); a quote's basket is either `paymentIntentId` or `context.items`, never both. The field rules of an insurance type's own object are left to the gateway, which answers 422 `insurance.validation.invalid` with every field error at once. `GetPolicyDocumentAsync`, `GetPolicyReceiptAsync` and `GetPolicyCertificateAsync` return the PDF as `LunixiBinaryResponse`; `ExportReconciliationAsync` returns the CSV with its trailer read (`Truncated`, `NextCursor`, `Aborted`). Read verified webhooks with `InsuranceWebhookData.FromWebhook` (order events) and `InsuranceLeadWebhookData.FromWebhook` (`insurance.lead.submitted`).
+
+## Subscriptions
+
+```csharp
+var customer = await lunixi.Subscriptions.Customers.UpsertAsync(new { externalId = "user-42", email = "ada@example.com" }, persistedCustomerKey);
+var plan = await lunixi.Subscriptions.Plans.CreateAsync(new
+{
+    productId, code = "pro-monthly", name = "Pro", price = "9900", currency = "TRY",
+    billing = new { frequency = SubscriptionBillingFrequencies.Monthly },
+}, persistedPlanKey);
+var subscription = await lunixi.Subscriptions.CreateAsync(new
+{
+    customerId = customer.GetProperty("id").GetString(), planId = plan.GetProperty("id").GetString(), paymentCardId,
+}, persistedSubscriptionKey);
+if (SubscriptionStatuses.IsActive(subscription)) { /* grant access */ }
+```
+
+`lunixi.Subscriptions` creates, reads, lists, cancels, pauses, resumes and re-plans subscriptions and hangs the related resources off sub-clients: `Plans`, `Customers`, `Cards` (saved from the checkout SDK's `paymentMethodToken`; a card number is refused by field name), `Invoices`, `Portal`, `Products`, `Features`, `Addons` and `Usage`. Calls carry the access token only (no per-request signature). `CreateAsync` requires an `Idempotency-Key` and also sends it in the body; plan, customer, card, plan-change and charge-retry writes accept one. Every call is checked against `SubscriptionRoutes` before sending (unknown fields and filters, missing required fields, value sets such as `SubscriptionCollectionMethods`, the plan's `billing` rule and supported currencies). Amounts are canonical minor-unit strings (`"0"` is a free plan), checked in bodies, filters and answers. Lists return `LunixiPage`; the subscription, plan, customer and invoice lists page with `pageToken`, which `IterateAsync` sends back. The embedded portal starts with `Portal.CreateSdkSessionAsync(customerId, origin)`; a hosted portal link from `Portal.CreatePortalLinkAsync` opens at `SubscriptionPortalLinks.HostedUrl(link)`. Webhook event names are in `SubscriptionEvents`.
+
+## KYC and identity signals
+
+```csharp
+var created = await lunixi.Kyc.CreateSessionAsync(new
+{
+    subjectId = "user-42", sessionType = KycSessionTypes.Kyc, externalCustomerId = "user-42", person = new { firstName = "Ada" },
+}, persistedSessionKey);
+
+var links = await lunixi.Identity.AccountLinksAsync(traceId);
+if (IdentitySignals.IsDeviceShared(links)) { /* one device, several accounts: review */ }
+```
+
+`lunixi.Kyc` creates KYC, KYB and evidence sessions (`person` / `company` are sent as `customer` with its `customerType`, `metadata` as `evidenceContextJson`), sets the jurisdiction and primary document, uploads documents from the server, submits, sends to manual review and reads the timeline, your KYC policy, webhook deliveries and erasure requests. `ListSessionsAsync` takes only `limit` and `cursor`. The browser capture runs with the publishable key; the `kyc.*` webhook (`KycEvents`) is the authority for the result, and `KycAssuranceLevels.Meets` compares an achieved assurance level with the one you require. `lunixi.Identity` analyses browser fingerprint traces (`AnalyzeSyncAsync`, `AnalyzeAsync`) and reads account links, sessions, related sessions, timelines and top sources; it returns signals, not an allow / block verdict. Both surfaces are bearer-only, checked against `KycRoutes` / `IdentityRoutes`, and never put a document image or field value in an error message.
+
+## Marketplace sub-dealers
+
+```csharp
+MarketplaceSeller[] sellers = [new("dealer-a", "60000"), new("dealer-b", "40000")];
+var intent = await lunixi.Marketplace.CreateCheckoutIntentAsync(
+    new CreateIntentRequest("100000", "TRY", "ORDER-7"), sellers, MarketplaceSellerPolicies.AllOrNothing, persistedIntentKey);
+
+var dealer = await lunixi.Marketplace.CreateDealerAsync(new { legalName = "Acme Ltd", dealerType = MarketplaceDealerTypes.LegalEntity });
+var link = await lunixi.Marketplace.OnboardingTokenAsync(dealer.GetProperty("id").GetString()!);
+var onboardingUrl = MarketplaceDealerOnboarding.Url(link);
+```
+
+`lunixi.Marketplace` sends split charges across sub-dealers and runs the dealer lifecycle (create, bulk create, list, status, onboarding link, application, terms, contract, activation, KYC result), commissions (rules, preview, resolve), payouts (create, mark paid, bulk mark paid), the payout ledger, transactions and the hash-chained audit log. The split charges (`CreateCheckoutIntentAsync`, `ChargeMarketplaceCard2dAsync`, `ChargeMarketplaceCard3dAsync`, `ChargeMarketplaceCardAsync`) are signed per request and take an optional `Idempotency-Key`; the other routes are bearer-only. The seller legs must add up to `amount` and a card charge needs its commercial context (`MarketplaceRoutes.ChargeRequiredFields`), or nothing is sent. Card data is sent as given and never placed in an error message; prefer the hosted checkout intent, since a direct card charge is PCI DSS SAQ-D scope. An intent answer without a token or form throws `MarketplaceCheckoutException`.
 
 ## Coverage and explicit transport
 
 | Surface | .NET 1.0.1 |
 | --- | --- |
 | Hosted intents, payment status/list, capture/refund/void, methods | Typed clients |
+| BIN, installment options, card taxonomy, stored cards, marketplace intents, payment analytics | Typed `lunixi.Payments` methods |
+| Payment links, including the QR image and link-image upload | `lunixi.PaymentLinks` |
+| Physical POS payments, reversals, reports, end-of-day runs and management (stores, registers, terminals, devices, device keys, end-of-day policy) | `lunixi.PhysicalPos`, `lunixi.PhysicalPosManagement` |
+| Payments with any method, payment actions, bank transfer exceptions, promissory notes (including the PDF) | `DirectMethodPaymentRequest` and typed `lunixi.Payments` methods |
+| Türkiye address dictionary | `lunixi.Reference` |
 | Split creation/status/list/refund and payment actions | Validated JSON DTO and typed client methods; rollout dependent |
-| Fraud decisions, transaction event ingest, decision logs | `lunixi.Fraud` |
+| Fraud decisions, transaction event ingest (single and batch), decision logs | `lunixi.Fraud` |
 | Webhooks | `WebhookVerifier`, `IWebhookReplayStore`, `WebhookProcessor` |
-| Payment links, wallet, bank-connect, sanctions, reference, insurance and other public JSON APIs | `SendAsync` with explicit documented route/body; no typed parity claim |
-| Binary image/PDF downloads, multipart uploads, browser checkout-session APIs | Not implemented by this JSON transport |
+| Wallet: end users, wallets, transfers, withdrawals, top-ups, payments, QR codes, bulk payouts | `lunixi.Wallet` |
+| Bank accounts (banks, connections, accounts, balances, transactions), outgoing transfers, currency exchange | `lunixi.BankConnect`, `.Transfers`, `.Fx` |
+| Sanctions screening, ongoing monitoring, entity intelligence, deny list | `lunixi.Sanction` |
+| Insurance products, quotes, orders, premium payment, policies and their PDFs, leads, reconciliation | `lunixi.Insurance` |
+| Subscriptions with plans, customers, saved cards, invoices, the customer portal, products, features, add-ons and usage | `lunixi.Subscriptions` and its sub-clients |
+| KYC, KYB and evidence sessions; identity signals (device and account linking) | `lunixi.Kyc`, `lunixi.Identity` |
+| Marketplace split charges, sub-dealers, commissions, payouts, audit log | `lunixi.Marketplace` |
+| Other public JSON APIs | `SendAsync` with explicit documented route/body; no typed parity claim |
+| Other binary downloads, multipart uploads, browser checkout-session APIs | Not implemented by this JSON transport |
 
 ```csharp
-var banks = await lunixi.SendAsync(HttpMethod.Get, "/api/v1/bank-connect/banks?limit=25");
+var plans = await lunixi.Subscriptions.Plans.ListAsync(new Dictionary<string, object?> { ["pageSize"] = 25 });
 var decision = await lunixi.Fraud.EvaluateAsync(new FraudEvaluateRequest(new
 {
     transactionRef = "ORDER-1001", subjectType = "CUSTOMER", subjectId = "customer-1",
 }));
 ```
 
-Generic requests are signed by default and restricted to `/api/v1/` on the configured HTTPS origin. Consult the product's public DTO and scope documentation. Product validation remains the caller's responsibility; supply its required stable idempotency key explicitly. Generic transport never grants an unavailable product or an API scope.
+Generic requests are signed by default and restricted to `/api/v1/` (and the subscription portal routes under `/api/panel/v1/subscriptions/portal/`) on the configured HTTPS origin. Consult the product's public DTO and scope documentation. Product validation remains the caller's responsibility; supply its required stable idempotency key explicitly. Generic transport never grants an unavailable product or an API scope.
 
 ## Verify exact webhook bytes
 

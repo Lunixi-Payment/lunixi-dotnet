@@ -76,7 +76,9 @@ Set `CreateIntentRequest.Preauth = true` for authorization followed by capture/v
 | Split create/status/list/refund and customer actions | `SplitPaymentRequest`, `lunixi.Payments` |
 | Fraud evaluation, transaction event ingest, decision logs | `lunixi.Fraud` |
 | Webhook verification and durable replay coordination | `WebhookVerifier`, `IWebhookReplayStore`, `WebhookProcessor` |
-| Payment links, wallet, bank-connect, sanctions, reference, insurance and other public JSON products | Explicit `SendAsync` calls; typed parity is not claimed |
+| Wallet, bank accounts with transfers and currency exchange, sanctions screening, insurance | `lunixi.Wallet`, `lunixi.BankConnect`, `lunixi.Sanction`, `lunixi.Insurance` |
+| Subscriptions, KYC and identity signals, marketplace sub-dealers and split charges | `lunixi.Subscriptions`, `lunixi.Kyc`, `lunixi.Identity`, `lunixi.Marketplace` |
+| Other public JSON products | Explicit `SendAsync` calls; typed parity is not claimed |
 
 `SplitPaymentRequest` validates documented JSON DTOs, exact totals, 1–5 legs, distinct card/provider references, method field shapes, installment quotes and 3DS callbacks. Use stored-card tokens. Continue with the same body/key; handle customer actions using `ConfirmActionAsync` and `ResendActionAsync`. Documented in-progress HTTP 400 responses are returned; failed/reconciliation states remain errors.
 
@@ -85,7 +87,7 @@ Set `CreateIntentRequest.Preauth = true` for authorization followed by capture/v
 
 
 ```csharp
-var banks = await lunixi.SendAsync(HttpMethod.Get, "/api/v1/bank-connect/banks?limit=25");
+var plans = await lunixi.Subscriptions.Plans.ListAsync(new Dictionary<string, object?> { ["pageSize"] = 25 });
 var decision = await lunixi.Fraud.EvaluateAsync(new FraudEvaluateRequest(new
 {
     transactionRef = "ORDER-1001", subjectType = "CUSTOMER", subjectId = "customer-1",
