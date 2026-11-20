@@ -43,12 +43,18 @@ namespace Lunixi.AspNetCoreSample
                 // Gateway idempotency expires after 24h: an older attempt requires reconciliation, never blind recreation.
                 if (DateTimeOffset.UtcNow - order.CreatedAt > TimeSpan.FromHours(23))
                     return Results.Conflict(new { code = "reconciliation_required" });
+                // Buyer, billing address and basket come from the stored order, never from the request.
+                var details = store.GetOrderDetails(orderId);
+                if (details is null) return Results.Conflict(new { code = "order_details_missing" });
                 try
                 {
                     var result = await client.Payments.CreateIntentAsync(new(order.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture), order.Currency, order.OrderId)
                     {
                         CallbackUrl = settings.CallbackUrl,
-                        BasketItems = [new("DEMO-SKU", "Demo product", order.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture))],
+                        Buyer = details.Buyer,
+                        BillingAddress = details.BillingAddress,
+                        ShippingAddress = details.ShippingAddress,
+                        BasketItems = details.BasketItems,
                     }, order.IdempotencyKey, context.RequestAborted);
                     var id = SampleStore.Text(result.Data, "paymentId");
                     var token = SampleStore.Text(result.Data, "token");

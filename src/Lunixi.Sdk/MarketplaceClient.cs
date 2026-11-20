@@ -40,14 +40,17 @@ public sealed class MarketplaceClient
     /// <summary>
     /// Hosted-form split checkout (<c>POST /api/v1/payments/marketplace/intents</c>, signed): a <see cref="CreateIntentRequest"/>
     /// (or its JSON body) plus the seller legs. Returns the answer as it came (<c>token</c>, <c>checkoutFormContent</c>,
-    /// <c>paymentId</c> …); an answer without a token or form throws <see cref="MarketplaceCheckoutException"/>. Same route as
-    /// <see cref="PaymentsClient.CreateMarketplaceIntentAsync"/>, which requires the key and leaves the policy out when null.
+    /// <c>paymentId</c> …); an answer without a token or form throws <see cref="MarketplaceCheckoutException"/>. The order details
+    /// are required as for <see cref="PaymentsClient.CreateIntentAsync"/> (<see cref="OrderDetails"/>; <c>buyer.ip</c> may be left
+    /// out). Same route as <see cref="PaymentsClient.CreateMarketplaceIntentAsync"/>, which requires the key and leaves the policy
+    /// out when null.
     /// </summary>
     public async Task<LunixiResponse> CreateCheckoutIntentAsync(object request, IReadOnlyList<MarketplaceSeller> sellers,
         string multiSellerPolicy = MarketplaceSellerPolicies.AllOrNothing, string? idempotencyKey = null, CancellationToken cancellationToken = default)
     {
         if (request is CreateIntentRequest intent) intent.Validate();
         var body = SplitBody(RouteTableInvoker.Changes(request, "createCheckoutIntent"), sellers, multiSellerPolicy);
+        OrderDetails.Require(body, "A marketplace payment intent", checkoutIntent: true);
         var response = await invoker.SendAsync("createCheckoutIntent", null, body, null, idempotencyKey, cancellationToken).ConfigureAwait(false);
         if (!HasText(response, "token") && !HasText(response, "checkoutFormContent")) throw new MarketplaceCheckoutException(response);
         return response;
@@ -58,12 +61,14 @@ public sealed class MarketplaceClient
     /// <c>billingAddress</c>, <c>basketItems</c>, <c>sellers</c>, <c>multiSellerPolicy</c>, <c>preauth?</c> …):
     /// <c>POST /api/v1/payments/marketplace/3d</c> when <paramref name="threeDS"/> is true, <c>/2d</c> otherwise (signed). Prefer
     /// <see cref="ChargeMarketplaceCard2dAsync"/> / <see cref="ChargeMarketplaceCard3dAsync"/>, which check the body and the legs.
+    /// The order details are checked before sending (<see cref="OrderDetails"/>).
     /// </summary>
     public Task<LunixiResponse> ChargeMarketplaceCardAsync(object payload, bool threeDS = false, string? idempotencyKey = null,
         CancellationToken cancellationToken = default)
     {
         var body = RouteTableInvoker.Changes(payload, "chargeMarketplaceCard");
         ChargeAmount(body);
+        OrderDetails.Require(body, "A marketplace card charge");
         return invoker.SendAsync(threeDS ? "chargeMarketplaceCard3d" : "chargeMarketplaceCard2d", null, body, null, idempotencyKey, cancellationToken);
     }
 

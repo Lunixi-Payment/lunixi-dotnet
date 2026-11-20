@@ -81,7 +81,12 @@ public class SubscriptionsClientTests
                 currency = "try",
                 billing = new { frequency = "monthly" },
             }, "idem-plan-0001");
-            await subscriptions.Customers.UpsertAsync(new { externalId = "u-42", email = "ada@example.com" }, "idem-cus-0001");
+            await subscriptions.Customers.UpsertAsync(new
+            {
+                externalId = "u-42", name = "Ada", surname = "Yilmaz", email = "ada@example.com", gsmNumber = "+905350000000",
+                identityNumber = "11111111111", billingAddress = "Example Street 1", billingCity = "Istanbul", billingCountry = "Turkey",
+                billingZipCode = "34000",
+            }, "idem-cus-0001");
             await subscriptions.Customers.GetByExternalIdAsync("u-42");
             await subscriptions.Customers.AdjustCreditAsync("cus_1", new { amountMinor = "500", currency = "TRY", type = "GRANT" });
             await subscriptions.Cards.ListAsync("cus_1", pageSize: 10);
@@ -182,6 +187,16 @@ public class SubscriptionsClientTests
             await Assert.ThrowsAsync<LunixiConfigurationException>(() =>
                 subscriptions.Cards.AddAsync(new { customerId = "cus_1", paymentMethodToken = "tok_abc", verificationMode = "ALWAYS" }));
             await Assert.ThrowsAsync<LunixiConfigurationException>(() => subscriptions.Cards.ListAsync(" "));
+
+            var customer = await Assert.ThrowsAsync<LunixiConfigurationException>(() =>
+                subscriptions.Customers.UpsertAsync(new { externalId = "u-42", email = "ada@example.com", name = "Ada" }));
+            Assert.Contains("surname", customer.Message);
+            await Assert.ThrowsAsync<LunixiConfigurationException>(() => subscriptions.Customers.UpsertAsync(new
+            {
+                externalId = "u-42", name = "Ada", surname = "Yilmaz", email = "ada@example.com", gsmNumber = "+905350000000",
+                identityNumber = "11111111111", billingAddress = "Example Street 1", billingCity = "Istanbul", billingCountry = "Turkey",
+                billingZipCode = "34000", locale = "tr",
+            }));
 
             await Assert.ThrowsAsync<LunixiConfigurationException>(() => subscriptions.Plans.ListAsync(new Dictionary<string, object?> { ["archived"] = true }));
             await Assert.ThrowsAsync<LunixiConfigurationException>(() =>

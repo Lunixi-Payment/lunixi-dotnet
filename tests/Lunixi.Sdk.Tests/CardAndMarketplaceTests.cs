@@ -93,7 +93,10 @@ public class CardAndMarketplaceTests
         var (client, requests) = RecordingClient.Create();
         using (client)
         {
-            var store = new StoreCardRequest(Card, "user-1", new Uri("https://shop.example/cards/return")) { Currency = "try" };
+            var store = new StoreCardRequest(Card, "user-1", new Uri("https://shop.example/cards/return"))
+            {
+                Currency = "try", Buyer = TestOrder.Buyer, BillingAddress = TestOrder.Address,
+            };
             Assert.DoesNotContain("4543871234567890", store.ToString());
             await Assert.ThrowsAsync<LunixiConfigurationException>(() => client.Payments.StoreCardAsync(store, null!));
             await Assert.ThrowsAsync<LunixiConfigurationException>(() => client.Payments.StoreCardAsync(store, "short"));
@@ -105,7 +108,8 @@ public class CardAndMarketplaceTests
             Assert.True(request.Signed);
             Assert.Equal("store-card:user-1:0001", request.IdempotencyKey);
             Assert.StartsWith("{\"card\":{\"cardHolderName\":", request.Body);
-            Assert.EndsWith(",\"cardUserKey\":\"user-1\",\"callbackUrl\":\"https://shop.example/cards/return\",\"currency\":\"TRY\"}", request.Body);
+            Assert.Contains(",\"cardUserKey\":\"user-1\",\"callbackUrl\":\"https://shop.example/cards/return\",\"currency\":\"TRY\",\"buyer\":{\"name\":\"Ada\"", request.Body);
+            Assert.EndsWith(",\"billingAddress\":{\"contactName\":\"Ada Yilmaz\",\"address\":\"Example Street 1\",\"city\":\"Istanbul\",\"country\":\"Turkey\",\"zipCode\":\"34000\"}}", request.Body);
         }
         Assert.Throws<LunixiConfigurationException>(() => new StoreCardRequest(Card, "user-1", new Uri("http://shop.example/return")));
         Assert.Throws<LunixiConfigurationException>(() => new StoreCardRequest(new { }, "user-1", new Uri("https://shop.example/return")));
@@ -138,14 +142,16 @@ public class CardAndMarketplaceTests
         var (client, requests) = RecordingClient.Create();
         using (client)
         {
-            var intent = new CreateIntentRequest("15000", "TRY", "ORDER-7");
+            var intent = TestOrder.Intent("15000", "TRY", "ORDER-7");
             MarketplaceSeller[] sellers = [new("dealer-a", "10000"), new("dealer-b", "5000")];
             await client.Payments.CreateMarketplaceIntentAsync(intent, sellers, "marketplace:order-7", MarketplaceSellerPolicies.AllOrNothing);
             var request = Assert.Single(requests);
             Assert.Equal(("POST", "/api/v1/payments/marketplace/intents"), (request.Method, request.PathAndQuery));
             Assert.True(request.Signed);
             Assert.Equal("marketplace:order-7", request.IdempotencyKey);
-            Assert.Equal("{\"amount\":\"15000\",\"currency\":\"TRY\",\"orderId\":\"ORDER-7\",\"sellers\":[{\"subDealerId\":\"dealer-a\",\"amountMinor\":\"10000\"},{\"subDealerId\":\"dealer-b\",\"amountMinor\":\"5000\"}],\"multiSellerPolicy\":\"ALL_OR_NOTHING\"}", request.Body);
+            Assert.StartsWith("{\"amount\":\"15000\",\"currency\":\"TRY\",\"orderId\":\"ORDER-7\",\"buyer\":{", request.Body);
+            Assert.Contains(",\"basketItems\":[{\"id\":\"SKU-1\"", request.Body);
+            Assert.EndsWith(",\"sellers\":[{\"subDealerId\":\"dealer-a\",\"amountMinor\":\"10000\"},{\"subDealerId\":\"dealer-b\",\"amountMinor\":\"5000\"}],\"multiSellerPolicy\":\"ALL_OR_NOTHING\"}", request.Body);
         }
     }
 
@@ -155,7 +161,7 @@ public class CardAndMarketplaceTests
         var (client, requests) = RecordingClient.Create();
         using (client)
         {
-            var intent = new CreateIntentRequest("15000", "TRY", "ORDER-7");
+            var intent = TestOrder.Intent("15000", "TRY", "ORDER-7");
             await Assert.ThrowsAsync<LunixiConfigurationException>(() =>
                 client.Payments.CreateMarketplaceIntentAsync(intent, [new("dealer-a", "10000"), new("dealer-b", "4999")], "marketplace:order-7"));
             await Assert.ThrowsAsync<LunixiConfigurationException>(() =>

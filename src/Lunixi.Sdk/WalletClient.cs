@@ -311,12 +311,18 @@ public sealed class WalletTopupsClient
     internal WalletTopupsClient(WalletInvoker invoker) => this.invoker = invoker;
 
     /// <summary>
-    /// Starts a card top-up: <c>{ creditWalletAccountId, amount, currency, fundingMerchantId?, savedCardUserKey?,
-    /// savedCardToken?, savedConsumerToken?, savedPublicCardStorageToken?, returnUrl? }</c>. Render <c>checkoutFormContent</c>
-    /// (or follow <c>redirectUrl</c> / <c>threeDsHtml</c>); the wallet is credited when the payment completes.
+    /// Starts a card top-up: <c>{ creditWalletAccountId, amount, currency, buyer, billingAddress, shippingAddress?,
+    /// fundingMerchantId?, savedCardUserKey?, savedCardToken?, savedConsumerToken?, savedPublicCardStorageToken?, returnUrl? }</c>.
+    /// The buyer (<c>ip</c>: the user's browser IP) and the billing address are required and checked before sending
+    /// (<see cref="OrderDetails"/>, no basket). Render <c>checkoutFormContent</c> (or follow <c>redirectUrl</c> /
+    /// <c>threeDsHtml</c>); the wallet is credited when the payment completes.
     /// </summary>
     public Task<JsonElement> StartCardAsync(object request, string idempotencyKey, CancellationToken cancellationToken = default)
-        => invoker.DataAsync("startCardTopup", null, request, null, idempotencyKey, cancellationToken);
+    {
+        var body = RouteRequest.ObjectOf(request, "startCardTopup body");
+        OrderDetails.Require(body, "A wallet card top-up", basket: false);
+        return invoker.DataAsync("startCardTopup", null, body, null, idempotencyKey, cancellationToken);
+    }
 
     /// <summary><c>{ operation, history }</c> of a top-up.</summary>
     public Task<JsonElement> GetAsync(string operationId, CancellationToken cancellationToken = default)

@@ -118,14 +118,17 @@ public sealed class DirectMethodPaymentRequest
     public DirectMethodPaymentRequest WithPaymentChannel(string paymentChannel) => Text("paymentChannel", paymentChannel, 256);
     /// <summary>The payment group value documented by the gateway.</summary>
     public DirectMethodPaymentRequest WithPaymentGroup(string paymentGroup) => Text("paymentGroup", paymentGroup, 256);
-    /// <summary>Buyer data following the public gateway DTO (a JSON object); do not log it.</summary>
+    /// <summary>The buyer (required, a JSON object with <see cref="OrderDetails.BuyerRequiredFields"/>); do not log it.</summary>
     public DirectMethodPaymentRequest WithBuyer(object buyer) => Object("buyer", buyer);
-    /// <summary>Billing address following the public gateway address DTO.</summary>
+    /// <summary>The billing address (required, a JSON object with <see cref="OrderDetails.AddressRequiredFields"/>).</summary>
     public DirectMethodPaymentRequest WithBillingAddress(object billingAddress) => Object("billingAddress", billingAddress);
-    /// <summary>Shipping address following the public gateway address DTO.</summary>
+    /// <summary>The shipping address; required when a basket item is <c>PHYSICAL</c>.</summary>
     public DirectMethodPaymentRequest WithShippingAddress(object shippingAddress) => Object("shippingAddress", shippingAddress);
 
-    /// <summary>Basket lines. Required for <see cref="PaymentMethods.ShoppingLoan"/> (1–100 items).</summary>
+    /// <summary>
+    /// Basket lines (required, at least one, each with <see cref="BasketItem.Category1"/>). A
+    /// <see cref="PaymentMethods.ShoppingLoan"/> takes 1–100 items.
+    /// </summary>
     public DirectMethodPaymentRequest WithBasketItems(IEnumerable<BasketItem> basketItems)
     {
         ArgumentNullException.ThrowIfNull(basketItems);
@@ -251,6 +254,7 @@ internal static class DirectMethodPaymentValidation
         foreach (var name in new[] { "buyer", "billingAddress", "shippingAddress", "metadata" })
             if (body.TryGetProperty(name, out var value) && value.ValueKind != JsonValueKind.Object)
                 throw new LunixiConfigurationException($"{name} must be a JSON object.");
+        OrderDetails.Require(body, "A direct method payment");
         return CanonicalJson.Element(root);
     }
 }

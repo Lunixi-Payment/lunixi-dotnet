@@ -201,8 +201,11 @@ public static class WalletRoutes
             ["getOperation"] = Get("/operations/:operationId"),
             ["getOperationReceipt"] = Get("/operations/:operationId/receipt"),
 
-            ["startCardTopup"] = Post("/topups/card").Keyed().WithRequired("creditWalletAccountId", "amount", "currency")
-                .WithOptional("fundingMerchantId", "savedCardUserKey", "savedCardToken", "savedConsumerToken", "savedPublicCardStorageToken", "returnUrl"),
+            // The payment provider requires the buyer and the billing address (buyer.ip: the user's browser IP); a missing
+            // field is 400 payment.order.field_required with the paths in details.fields.
+            ["startCardTopup"] = Post("/topups/card").Keyed().WithRequired("creditWalletAccountId", "amount", "currency", "buyer", "billingAddress")
+                .WithOptional("fundingMerchantId", "savedCardUserKey", "savedCardToken", "savedConsumerToken", "savedPublicCardStorageToken", "returnUrl",
+                    "shippingAddress"),
             ["getTopup"] = Get("/topups/:operationId"),
             // The gateway DTO marks approverPrincipal optional, but the wallet service refuses the refund without it.
             ["refundTopup"] = Post("/topups/:operationId/refund").WithRequired("reason", "requesterPrincipal", "approverPrincipal"),

@@ -19,6 +19,7 @@ Keep your normal NuGet feed enabled for dependencies, or reference the SDK proje
 ## Client and merchant-site checkout
 
 ```csharp
+using System.Text.Json;
 using Lunixi;
 
 var lunixi = new LunixiClient(new LunixiOptions
@@ -28,10 +29,23 @@ var lunixi = new LunixiClient(new LunixiOptions
     PrivateKeyPem = Environment.GetEnvironmentVariable("LUNIXI_PRIVATE_KEY_PEM")!,
 });
 
+// Order details every payment requires: take them from your checkout, never a placeholder.
+var buyer = JsonSerializer.SerializeToElement(new
+{
+    name = "Ada", surname = "Yilmaz", identityNumber = "11111111111", email = "ada@example.com",
+    gsmNumber = "+905350000000", city = "Istanbul", country = "Turkey", zipCode = "34000",
+});
+var billingAddress = JsonSerializer.SerializeToElement(new
+{
+    contactName = "Ada Yilmaz", address = "Example Street 1", city = "Istanbul", country = "Turkey", zipCode = "34000",
+});
+
 var request = new CreateIntentRequest("10050", "TRY", "ORDER-1001")
 {
     CallbackUrl = new Uri("https://merchant.example/payments/return"),
-    BasketItems = [new BasketItem("SKU-1", "Demo product", "10050")],
+    Buyer = buyer,
+    BillingAddress = billingAddress,
+    BasketItems = [new BasketItem("SKU-1", "Gift card", "10050", "VIRTUAL") { Category1 = "Digital" }],
     EnabledInstallments = [1, 2, 3], // optional: at most 3 installments
 };
 // Load this key from a persisted checkout attempt; reuse it after network failures.
@@ -42,7 +56,9 @@ var token = response.Data.GetProperty("token").GetString();
 
 Register one client per application and dispose it during shutdown. The key determines TEST/LIVE. Register the public Ed25519 key in the dashboard; keep the PKCS#8 PEM private key on your server. `Ed25519Signer.GenerateKeyPair()` generates both. → [Authentication](/getting-started/authentication)
 
-Amounts are positive canonical minor-unit strings: `"10050"` = 100.50 TRY. Read prices from your order database. Basket `Price` is the complete line total; line totals must equal `Amount`. Legacy top-level amount fields are rejected. Provide buyer/billing/shipping JSON from trusted server records when your checkout requires them. Optional `BasketItem.ProductCategory` (sent as `productCategory`) is the Lunixi product category, used by payment methods with legal installment limits (e.g. shopping loan) and other platform features; use a `ProductCategories` constant (`ProductCategories.All` lists the codes known to this version). Null omits the field and keeps today's behaviour; an unknown code is rejected by the API with HTTP 400. The dictionary only grows, so the property stays a string.
+Every payment body carries the order details (`OrderDetails`): `buyer` (`name`, `surname`, `identityNumber` — Turkish ID or passport number, `email` — ASCII, `gsmNumber`, `city`, `country`, `zipCode`, `ip` — the buyer's browser IP), `billingAddress` (`contactName`, `address`, `city`, `country`, `zipCode`) and at least one `basketItems` entry (`id`, `name`, `category1`, `itemType`, `price`; the prices add up to the amount); a `PHYSICAL` item also needs `shippingAddress`. On `CreateIntentRequest` and the marketplace intents `ip` may be left out: the Lunixi form takes it from the buyer's browser. `CreateIntentAsync`, `CreateMarketplaceIntentAsync`, `DirectMethodPaymentAsync`, `SplitPaymentRequest`, the marketplace `CreateCheckoutIntentAsync` and card charges, `StoreCardAsync` (buyer and billing address only) and `Wallet.Topups.StartCardAsync` (buyer and billing address) throw `LunixiConfigurationException` naming the missing paths before sending (`OrderDetails.MissingFields(body)` returns the same list, for example `buyer.email` or `basketItems.0.category1`). The gateway answers a missing field with HTTP 400 `payment.order.field_required` and an invalid one with `payment.order.field_invalid` (`OrderFieldErrorCodes`, `OrderFieldReasons`).
+
+Amounts are positive canonical minor-unit strings: `"10050"` = 100.50 TRY. Read prices from your order database. Basket `Price` is the complete line total; line totals must equal `Amount`. Legacy top-level amount fields are rejected. Read the buyer, billing and shipping JSON from trusted server records. Optional `BasketItem.ProductCategory` (sent as `productCategory`) is the Lunixi product category, used by payment methods with legal installment limits (e.g. shopping loan) and other platform features; use a `ProductCategories` constant (`ProductCategories.All` lists the codes known to this version). Null omits the field and keeps today's behaviour; an unknown code is rejected by the API with HTTP 400. The dictionary only grows, so the property stays a string.
 
 `EnabledInstallments` only narrows the installment counts the hosted form offers for this payment (`[1]` = single payment only); the form shows only the counts your panel settings, the card and the platform maximum also allow, and null means no restriction. Counts are 1–36, distinct and include 1, otherwise `CreateIntentAsync` throws `LunixiConfigurationException` before any request; the list is sent as `enabledInstallments` in ascending order.
 

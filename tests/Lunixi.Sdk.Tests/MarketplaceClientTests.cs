@@ -20,9 +20,9 @@ public class MarketplaceClientTests
         ["currency"] = "TRY",
         ["orderId"] = "ORD-MP-1",
         ["card"] = new { cardHolderName = "Synthetic Holder", cardNumber = CardNumber, expireMonth = "12", expireYear = "28", cvcNumber = "987" },
-        ["buyer"] = new { name = "Ada", surname = "Yilmaz" },
-        ["billingAddress"] = new { city = "Istanbul" },
-        ["basketItems"] = new[] { new BasketItem("SKU-1", "Demo", amount) },
+        ["buyer"] = TestOrder.Buyer,
+        ["billingAddress"] = TestOrder.Address,
+        ["basketItems"] = TestOrder.Basket(amount),
     };
 
     [Fact]
@@ -43,14 +43,15 @@ public class MarketplaceClientTests
         var (client, requests) = RecordingClient.Create(_ => FakeHandler.Json(IntentAnswer, System.Net.HttpStatusCode.Created));
         using (client)
         {
-            var response = await client.Marketplace.CreateCheckoutIntentAsync(new CreateIntentRequest("100000", "TRY", "WC-7"), Legs(),
+            var response = await client.Marketplace.CreateCheckoutIntentAsync(TestOrder.Intent("100000", "TRY", "WC-7"), Legs(),
                 MarketplaceSellerPolicies.AllOrNothing, "idem-mp-00001");
             Assert.Equal("tok_1", response.Envelope.GetProperty("token").GetString());
             var request = Assert.Single(requests);
             Assert.Equal(("POST", "/api/v1/payments/marketplace/intents"), (request.Method, request.PathAndQuery));
             Assert.True(request.Signed);
             Assert.Equal("idem-mp-00001", request.IdempotencyKey);
-            Assert.Equal("{\"amount\":\"100000\",\"currency\":\"TRY\",\"orderId\":\"WC-7\",\"sellers\":[{\"subDealerId\":\"d_alice\",\"amountMinor\":\"60000\"}," +
+            Assert.StartsWith("{\"amount\":\"100000\",\"currency\":\"TRY\",\"orderId\":\"WC-7\",\"buyer\":{", request.Body);
+            Assert.EndsWith(",\"sellers\":[{\"subDealerId\":\"d_alice\",\"amountMinor\":\"60000\"}," +
                 "{\"subDealerId\":\"d_bob\",\"amountMinor\":\"40000\",\"scenario\":{\"type\":\"DYNAMIC_RATE\",\"ratePercent\":\"5\"}}],\"multiSellerPolicy\":\"ALL_OR_NOTHING\"}", request.Body);
         }
     }
@@ -62,7 +63,7 @@ public class MarketplaceClientTests
         using (client)
         {
             var error = await Assert.ThrowsAsync<MarketplaceCheckoutException>(() =>
-                client.Marketplace.CreateCheckoutIntentAsync(new CreateIntentRequest("1000", "TRY", "o1"), [new MarketplaceSeller("d_1", "1000")]));
+                client.Marketplace.CreateCheckoutIntentAsync(TestOrder.Intent("1000", "TRY", "o1"), [new MarketplaceSeller("d_1", "1000")]));
             Assert.Equal("marketplace.payment.seller_not_eligible", error.Code);
             Assert.DoesNotContain("seller not eligible", error.Message);
         }
@@ -75,7 +76,7 @@ public class MarketplaceClientTests
         using (client)
         {
             var marketplace = client.Marketplace;
-            var intent = new CreateIntentRequest("1000", "TRY", "o1");
+            var intent = TestOrder.Intent("1000", "TRY", "o1");
             await Assert.ThrowsAsync<LunixiConfigurationException>(() => marketplace.CreateCheckoutIntentAsync(intent, []));
             await Assert.ThrowsAsync<LunixiConfigurationException>(() => marketplace.CreateCheckoutIntentAsync(intent, [new MarketplaceSeller("d_1", "999")]));
             await Assert.ThrowsAsync<LunixiConfigurationException>(() =>

@@ -23,7 +23,8 @@ public class PaymentLinkTests
         Assert.Equal(("svg", "png", "tr", "en", "EMAIL", "SMS", "TEST", "LIVE"),
             (PaymentLinkQrFormats.Svg, PaymentLinkQrFormats.Png, PaymentLinkLocales.Turkish, PaymentLinkLocales.English,
              PaymentLinkDeliveryChannels.Email, PaymentLinkDeliveryChannels.Sms, PaymentLinkEnvironments.Test, PaymentLinkEnvironments.Live));
-        Assert.Equal(new[] { "HIDDEN", "OPTIONAL", "REQUIRED" }, new[] { BuyerFieldRequirements.Hidden, BuyerFieldRequirements.Optional, BuyerFieldRequirements.Required });
+        Assert.Equal(new[] { "REQUIRED" }, BuyerFieldRequirements.All);
+        Assert.Equal("REQUIRED", BuyerFieldRequirements.Required);
         Assert.Equal(new[]
         {
             "usage", "amountMode", "currency", "amountMinor", "minAmountMinor", "maxAmountMinor", "suggestedAmountsMinor",

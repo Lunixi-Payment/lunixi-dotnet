@@ -32,8 +32,8 @@ public class TransportTests
             Assert.True(SignatureAlgorithm.Ed25519.Verify(publicKey, Encoding.UTF8.GetBytes(canonical), Convert.FromBase64String(request.Headers.GetValues("X-Signature").Single())));
             return FakeHandler.Json(request.RequestUri.AbsolutePath == "/api/v1/auth/token" ? "{\"access_token\":\"synthetic-token\",\"expires_in\":1800}" : "{\"data\":{\"status\":\"CREATED\"}}");
         }));
-        await client.Payments.CreateIntentAsync(new("10050", "TRY", "ORDER-1"), "checkout:persisted-001");
-        await client.Payments.CreateIntentAsync(new("10050", "TRY", "ORDER-1"), "checkout:persisted-001");
+        await client.Payments.CreateIntentAsync(TestOrder.Intent("10050", "TRY", "ORDER-1"), "checkout:persisted-001");
+        await client.Payments.CreateIntentAsync(TestOrder.Intent("10050", "TRY", "ORDER-1"), "checkout:persisted-001");
         Assert.Equal(1, authCount); Assert.Equal(2, operations);
     }
 

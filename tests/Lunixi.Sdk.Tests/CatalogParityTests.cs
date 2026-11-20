@@ -149,6 +149,15 @@ public class CatalogParityTests
                 ["SessionType.ALL"] = KycSessionTypes.All,
             },
             ["identity"] = new() { ["IDENTITY_ANALYZE_FIELDS"] = IdentityRoutes.AnalyzeFields },
+            ["payments"] = new()
+            {
+                ["ORDER_DETAILS_REQUIRED_FIELDS"] = OrderDetails.RequiredFields,
+                ["BUYER_REQUIRED_FIELDS"] = OrderDetails.BuyerRequiredFields,
+                ["CHECKOUT_INTENT_BUYER_OPTIONAL_FIELDS"] = OrderDetails.CheckoutIntentBuyerOptionalFields,
+                ["ADDRESS_REQUIRED_FIELDS"] = OrderDetails.AddressRequiredFields,
+                ["BASKET_ITEM_REQUIRED_FIELDS"] = OrderDetails.BasketItemRequiredFields,
+                ["SPLIT_PAYMENT_FIELDS"] = SplitPaymentFields.Payment,
+            },
             ["marketplace"] = new()
             {
                 ["MARKETPLACE_CHARGE_REQUIRED_FIELDS"] = MarketplaceRoutes.ChargeRequiredFields,
@@ -192,6 +201,7 @@ public class CatalogParityTests
                 ["SubscriptionPlanChangeBehavior"] = SubscriptionPlanChangeBehaviors.All,
                 ["SubscriptionPortalSdkMode"] = SubscriptionPortalSdkModes.All,
                 ["SubscriptionEvents"] = SubscriptionEvents.All,
+                ["SubscriptionCustomerErrorCode"] = [SubscriptionCustomerErrorCodes.FieldRequired, SubscriptionCustomerErrorCodes.FieldInvalid],
             },
             ["kyc"] = new()
             {
@@ -202,6 +212,16 @@ public class CatalogParityTests
                 ["KycAssuranceDomain"] = KycAssuranceDomains.All,
                 ["KycEvents"] = KycEvents.All,
             },
+            ["payments"] = new()
+            {
+                ["OrderFieldErrorCode"] = [OrderFieldErrorCodes.FieldRequired, OrderFieldErrorCodes.FieldInvalid],
+                ["OrderFieldReason"] =
+                [
+                    OrderFieldReasons.Required, OrderFieldReasons.RequiredWhenPhysical, OrderFieldReasons.InvalidType,
+                    OrderFieldReasons.InvalidFormat, OrderFieldReasons.TooLong, OrderFieldReasons.TooFewItems,
+                ],
+            },
+            ["payment-links"] = new() { ["BuyerFieldRequirement"] = BuyerFieldRequirements.All },
             ["marketplace"] = new()
             {
                 ["MarketplaceDealerStatus"] = MarketplaceDealerStatuses.All,

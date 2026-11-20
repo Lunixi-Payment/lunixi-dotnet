@@ -52,7 +52,8 @@ public sealed class InstallmentOptionsRequest
 /// <summary>
 /// Body of <c>POST /api/v1/payments/cards</c>: verifies a card and stores it for <c>cardUserKey</c>. The answer carries the
 /// <c>storedCardToken</c> to charge later; the card number and security code are never returned, logged or placed in an
-/// error message by the SDK.
+/// error message by the SDK. <see cref="Buyer"/> and <see cref="BillingAddress"/> are required (no basket; see
+/// <see cref="OrderDetails"/>).
 /// </summary>
 public sealed class StoreCardRequest
 {
@@ -63,6 +64,12 @@ public sealed class StoreCardRequest
     public Uri CallbackUrl { get; }
     /// <summary>Optional verification currency, a three-letter code.</summary>
     public string? Currency { get; init; }
+    /// <summary>
+    /// The card holder as the buyer (required, a JSON object with <see cref="OrderDetails.BuyerRequiredFields"/>; do not log it).
+    /// </summary>
+    public JsonElement? Buyer { get; init; }
+    /// <summary>The billing address (required, a JSON object with <see cref="OrderDetails.AddressRequiredFields"/>).</summary>
+    public JsonElement? BillingAddress { get; init; }
 
     /// <summary>
     /// Creates a request from the card fields of the public gateway card DTO (a JSON object), the owner's key and the
@@ -91,6 +98,8 @@ public sealed class StoreCardRequest
             var normalized = Currency.ToUpperInvariant();
             RequestValidation.Currency(normalized); body["currency"] = normalized;
         }
+        if (Buyer is { } buyer) body["buyer"] = JsonNode.Parse(buyer.GetRawText());
+        if (BillingAddress is { } billingAddress) body["billingAddress"] = JsonNode.Parse(billingAddress.GetRawText());
         return body;
     }
 

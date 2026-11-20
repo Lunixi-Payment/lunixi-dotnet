@@ -37,6 +37,7 @@ Alternatively reference `src/Lunixi.Sdk/Lunixi.Sdk.csproj` directly. Restore the
 ## Create one client per application
 
 ```csharp
+using System.Text.Json;
 using Lunixi;
 
 using var lunixi = new LunixiClient(new LunixiOptions
@@ -63,10 +64,23 @@ The client sends signed **bodyless** token requests, caches tokens with a 30-sec
 ## Checkout: embedded by default, optional hosted mode
 
 ```csharp
+// Order details every payment requires: take them from your checkout, never a placeholder.
+var buyer = JsonSerializer.SerializeToElement(new
+{
+    name = "Ada", surname = "Yilmaz", identityNumber = "11111111111", email = "ada@example.com",
+    gsmNumber = "+905350000000", city = "Istanbul", country = "Turkey", zipCode = "34000",
+});
+var billingAddress = JsonSerializer.SerializeToElement(new
+{
+    contactName = "Ada Yilmaz", address = "Example Street 1", city = "Istanbul", country = "Turkey", zipCode = "34000",
+});
+
 var request = new CreateIntentRequest("10050", "TRY", "ORDER-1001")
 {
     CallbackUrl = new Uri("https://merchant.example/payments/return"),
-    BasketItems = [new BasketItem("SKU-1", "Demo product", "10050")],
+    Buyer = buyer,
+    BillingAddress = billingAddress,
+    BasketItems = [new BasketItem("SKU-1", "Gift card", "10050", "VIRTUAL") { Category1 = "Digital" }],
     EnabledInstallments = [1, 2, 3], // optional: at most 3 installments
 };
 
@@ -76,7 +90,9 @@ var paymentId = result.Data.GetProperty("paymentId").GetString();
 var checkoutToken = result.Data.GetProperty("token").GetString();
 ```
 
-Use your server's order amount. `10050` means 100.50 TRY. All typed payment amounts are positive canonical minor-unit strings, capped at the signed 64-bit fiat limit. Basket item `Price` is the entire line total, and line totals must equal `Amount`. Root `price` / `paidPrice` fields are rejected, including through generic transport; basket `price` remains valid. Supply buyer/billing/shipping JSON from trusted server records when your flow requires them. Optional `BasketItem.ProductCategory` (sent as `productCategory`) is the Lunixi product category, used by payment methods with legal installment limits (e.g. shopping loan) and other platform features; use a `ProductCategories` constant (`ProductCategories.All` lists the codes known to this version). Null omits the field and keeps today's behaviour; an unknown code is rejected by the API with HTTP 400. The dictionary only grows, so the property stays a string. No raw-card charge API is enabled by default.
+Use your server's order amount. `10050` means 100.50 TRY. All typed payment amounts are positive canonical minor-unit strings, capped at the signed 64-bit fiat limit. Basket item `Price` is the entire line total, and line totals must equal `Amount`. Root `price` / `paidPrice` fields are rejected, including through generic transport; basket `price` remains valid. Read the buyer, billing and shipping JSON from trusted server records. Optional `BasketItem.ProductCategory` (sent as `productCategory`) is the Lunixi product category, used by payment methods with legal installment limits (e.g. shopping loan) and other platform features; use a `ProductCategories` constant (`ProductCategories.All` lists the codes known to this version). Null omits the field and keeps today's behaviour; an unknown code is rejected by the API with HTTP 400. The dictionary only grows, so the property stays a string. No raw-card charge API is enabled by default.
+
+Every payment body carries the order details (`OrderDetails`): `buyer` (`name`, `surname`, `identityNumber` — Turkish ID or passport number, `email` — ASCII, `gsmNumber`, `city`, `country`, `zipCode`, `ip` — the buyer's browser IP), `billingAddress` (`contactName`, `address`, `city`, `country`, `zipCode`) and at least one `basketItems` entry (`id`, `name`, `category1`, `itemType`, `price`; the prices add up to the amount); a `PHYSICAL` item also needs `shippingAddress`. On `CreateIntentRequest` and the marketplace intents `ip` may be left out: the Lunixi form takes it from the buyer's browser. `CreateIntentAsync`, `CreateMarketplaceIntentAsync`, `DirectMethodPaymentAsync`, `SplitPaymentRequest`, the marketplace `CreateCheckoutIntentAsync` and card charges, `StoreCardAsync` (buyer and billing address only) and `Wallet.Topups.StartCardAsync` (buyer and billing address) throw `LunixiConfigurationException` naming the missing paths before sending (`OrderDetails.MissingFields(body)` returns the same list, for example `buyer.email` or `basketItems.0.category1`). The gateway answers a missing field with HTTP 400 `payment.order.field_required` and an invalid one with `payment.order.field_invalid` (`OrderFieldErrorCodes`, `OrderFieldReasons`).
 
 `EnabledInstallments` only narrows the installment counts the hosted form offers for this payment (`[1]` = single payment only); the form shows only the counts your panel settings, the card and the platform maximum also allow, and null means no restriction. Counts are 1–36, distinct and include 1, otherwise `CreateIntentAsync` throws `LunixiConfigurationException` before any request; the list is sent as `enabledInstallments` in ascending order.
 
@@ -116,7 +132,7 @@ The SDK sends only the chosen method's block (`PaymentMethodFields.MethodBlocks`
 
 `LunixiResponse.StatusCode`, `.Envelope`, `.Data` and `.RequestId` preserve pending states and pagination metadata. A 202 or a pending status is not proof of payment. Preauthorization uses `CreateIntentRequest.Preauth = true`, then capture or void.
 
-Split APIs: `CreateSplitAsync`, `GetSplitAsync`, `ListSplitsAsync`, `RefundSplitAsync`. `SplitPaymentRequest` accepts the documented JSON DTO, validates 1–5 legs, exact `totalAmount`, distinct stored-card/provider references, allowed method fields, installment quotes and required 3DS callback. Use stored-card tokens; never raw card numbers. A non-card leg carries one of `SplitPaymentFields.LegBlocks` (`mobileBilling`, `wallet`, `promissoryNote`); meal card, open banking, shopping loan and bank transfer cannot be split legs. `SplitPaymentEvents` lists the split webhooks; add `SplitPaymentEvents.LegEventsSubscription` to an endpoint to also receive leg events. Action APIs are `ConfirmActionAsync` and `ResendActionAsync`. Documented in-progress HTTP 400 split responses are returned as `LunixiResponse`; failed/reconciliation states remain exceptions. **Split endpoint availability depends on gateway rollout and merchant capabilities. Source support does not assert live availability.** The same split request and operation key must be reused to continue the saga.
+Split APIs: `CreateSplitAsync`, `GetSplitAsync`, `ListSplitsAsync`, `RefundSplitAsync`. `SplitPaymentRequest` accepts the documented JSON DTO (with `buyer`, `billingAddress`, `basketItems` and, for a `PHYSICAL` item, `shippingAddress`), validates the order details, 1–5 legs, exact `totalAmount`, distinct stored-card/provider references, allowed method fields, installment quotes and required 3DS callback. Use stored-card tokens; never raw card numbers. A non-card leg carries one of `SplitPaymentFields.LegBlocks` (`mobileBilling`, `wallet`, `promissoryNote`); meal card, open banking, shopping loan and bank transfer cannot be split legs. `SplitPaymentEvents` lists the split webhooks; add `SplitPaymentEvents.LegEventsSubscription` to an endpoint to also receive leg events. Action APIs are `ConfirmActionAsync` and `ResendActionAsync`. Documented in-progress HTTP 400 split responses are returned as `LunixiResponse`; failed/reconciliation states remain exceptions. **Split endpoint availability depends on gateway rollout and merchant capabilities. Source support does not assert live availability.** The same split request and operation key must be reused to continue the saga.
 
 ### Cards, installments and marketplace intents
 
@@ -131,7 +147,7 @@ var taxonomy = await lunixi.Payments.CardTaxonomyAsync();
 
 `InstallmentOptionsAsync` returns the table and, for an installment count above one with a BIN, the `quoteToken` that `DirectMethodPaymentRequest.WithInstallment(count, quoteToken)` needs. `EnabledInstallments` follows the intent rule (1–36, distinct, 1 included, sent ascending). A BIN or PAN prefix must be 6–19 digits and is never placed in an exception message.
 
-Stored cards: `StoreCardAsync(new StoreCardRequest(card, cardUserKey, callbackUrl), persistedKey)` (signed, idempotency key required) returns the `storedCardToken`; `ListStoredCardsAsync(cardUserKey)`, `GetStoredCardAsync(storedCardToken)` and `DeactivateStoredCardAsync(storedCardToken, persistedKey)` (signed, key required) manage them. `StoreCardRequest.ToString()` redacts the card.
+Stored cards: `StoreCardAsync(new StoreCardRequest(card, cardUserKey, callbackUrl) { Buyer = buyer, BillingAddress = billingAddress }, persistedKey)` (signed, idempotency key required; buyer and billing address required) returns the `storedCardToken`; `ListStoredCardsAsync(cardUserKey)`, `GetStoredCardAsync(storedCardToken)` and `DeactivateStoredCardAsync(storedCardToken, persistedKey)` (signed, key required) manage them. `StoreCardRequest.ToString()` redacts the card.
 
 `CreateMarketplaceIntentAsync(intent, [new MarketplaceSeller("dealer-a", "10000"), new MarketplaceSeller("dealer-b", "5000")], persistedKey, MarketplaceSellerPolicies.AllOrNothing)` adds `sellers[]` to the hosted intent body; the sellers' `amountMinor` values must add up exactly to the intent amount, otherwise the SDK throws before sending. Reports: `FailoverRecoveryAnalyticsAsync(filters)` and `ProviderCredentialAnalyticsAsync(credentialId, filters)`.
 
@@ -264,7 +280,12 @@ BasketItem premiumItem = InsuranceClient.PremiumBasketItem(order, "Travel insura
 ## Subscriptions
 
 ```csharp
-var customer = await lunixi.Subscriptions.Customers.UpsertAsync(new { externalId = "user-42", email = "ada@example.com" }, persistedCustomerKey);
+var customer = await lunixi.Subscriptions.Customers.UpsertAsync(new
+{
+    externalId = "user-42", name = "Ada", surname = "Yilmaz", email = "ada@example.com", gsmNumber = "+905350000000",
+    identityNumber = "11111111111", billingAddress = "Example Street 1", billingCity = "Istanbul", billingCountry = "Turkey",
+    billingZipCode = "34000",
+}, persistedCustomerKey);
 var plan = await lunixi.Subscriptions.Plans.CreateAsync(new
 {
     productId, code = "pro-monthly", name = "Pro", price = "9900", currency = "TRY",
@@ -298,7 +319,11 @@ if (IdentitySignals.IsDeviceShared(links)) { /* one device, several accounts: re
 ```csharp
 MarketplaceSeller[] sellers = [new("dealer-a", "60000"), new("dealer-b", "40000")];
 var intent = await lunixi.Marketplace.CreateCheckoutIntentAsync(
-    new CreateIntentRequest("100000", "TRY", "ORDER-7"), sellers, MarketplaceSellerPolicies.AllOrNothing, persistedIntentKey);
+    new CreateIntentRequest("100000", "TRY", "ORDER-7")
+    {
+        Buyer = buyer, BillingAddress = billingAddress, // order details as in the checkout example
+        BasketItems = [new BasketItem("SKU-7", "Gift card", "100000", "VIRTUAL") { Category1 = "Digital" }],
+    }, sellers, MarketplaceSellerPolicies.AllOrNothing, persistedIntentKey);
 
 var dealer = await lunixi.Marketplace.CreateDealerAsync(new { legalName = "Acme Ltd", dealerType = MarketplaceDealerTypes.LegalEntity });
 var link = await lunixi.Marketplace.OnboardingTokenAsync(dealer.GetProperty("id").GetString()!);

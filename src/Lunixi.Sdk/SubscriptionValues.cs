@@ -2,6 +2,18 @@ using System.Text.Json;
 
 namespace Lunixi;
 
+/// <summary>
+/// Errors of <see cref="SubscriptionCustomersClient.UpsertAsync"/>: a missing or invalid customer field (<c>details.field</c>,
+/// <c>details.reason</c>, <c>details.fields</c>).
+/// </summary>
+public static class SubscriptionCustomerErrorCodes
+{
+    /// <summary><c>subscription.customer.field_required</c></summary>
+    public const string FieldRequired = "subscription.customer.field_required";
+    /// <summary><c>subscription.customer.field_invalid</c></summary>
+    public const string FieldInvalid = "subscription.customer.field_invalid";
+}
+
 /// <summary>Subscription status (<c>status</c>).</summary>
 public static class SubscriptionStatuses
 {
@@ -247,8 +259,12 @@ public static class SubscriptionRoutes
             ["plans.translations"] = LunixiRoute.Get(Subs + "/plans/:planId/translations"),
             ["plans.upsertTranslation"] = LunixiRoute.Patch(Subs + "/plans/:planId/translations/:locale").AsFree(),
 
+            // Renewals take the buyer from this record: identity and billing details are required
+            // (400 subscription.customer.field_required).
             ["customers.upsert"] = LunixiRoute.Put(Subs + "/customers").KeyAccepted()
-                .WithRequired("externalId").WithOptional("email", "name", "phone", "locale", "metadata"),
+                .WithRequired("externalId", "name", "surname", "email", "gsmNumber", "identityNumber",
+                    "billingAddress", "billingCity", "billingCountry", "billingZipCode")
+                .WithOptional("billingContactName", "shippingContactName", "shippingAddress", "shippingCity", "shippingCountry", "shippingZipCode"),
             ["customers.get"] = LunixiRoute.Get(Subs + "/customers/:customerId"),
             ["customers.getByExternalId"] = LunixiRoute.Get(Subs + "/customers/by-external/:externalId"),
             ["customers.list"] = LunixiRoute.Get(Subs + "/customers").WithQuery(Cursor("search", "includeArchived")),

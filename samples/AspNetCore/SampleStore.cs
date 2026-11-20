@@ -8,6 +8,12 @@ namespace Lunixi.AspNetCoreSample;
 /// <summary>Persistent sample order and attempt, with money read from the server database.</summary>
 public sealed record SampleAttempt(string OrderId, long Amount, string Currency, string State, string IdempotencyKey, DateTimeOffset CreatedAt);
 
+/// <summary>
+/// The order details every payment requires, stored with the order: the buyer, the billing address, the shipping address
+/// (for physical goods) and the basket lines. The buyer's IP is left out: the Lunixi form takes it from the browser.
+/// </summary>
+public sealed record SampleOrderDetails(JsonElement Buyer, JsonElement BillingAddress, JsonElement? ShippingAddress, IReadOnlyList<BasketItem> BasketItems);
+
 /// <summary>A locally bound payment candidate; webhook input cannot choose an unrelated payment query.</summary>
 public sealed record KnownPayment(string OrderId, long Amount, string Currency, string PaymentId);
 
@@ -29,10 +35,31 @@ public sealed class SampleStore(string databasePath)
             CREATE TABLE IF NOT EXISTS orders(order_id TEXT PRIMARY KEY, amount INTEGER NOT NULL, currency TEXT NOT NULL, payment_id TEXT UNIQUE, state TEXT NOT NULL DEFAULT 'UNPAID');
             CREATE TABLE IF NOT EXISTS attempts(order_id TEXT PRIMARY KEY REFERENCES orders(order_id), operation_key TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS webhook_inbox(event_id TEXT PRIMARY KEY, body_sha256 TEXT NOT NULL, completed_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS order_details(order_id TEXT PRIMARY KEY REFERENCES orders(order_id), buyer TEXT NOT NULL, billing_address TEXT NOT NULL, shipping_address TEXT, basket_items TEXT NOT NULL);
             INSERT OR IGNORE INTO orders(order_id,amount,currency) VALUES('DEMO-1001',10050,'TRY');
+            INSERT OR IGNORE INTO order_details(order_id,buyer,billing_address,shipping_address,basket_items) VALUES('DEMO-1001',
+              '{"name":"Demo","surname":"Buyer","identityNumber":"11111111111","email":"buyer@example.com","gsmNumber":"+905350000000","city":"Istanbul","country":"Turkey","zipCode":"34000"}',
+              '{"contactName":"Demo Buyer","address":"Example Street 1","city":"Istanbul","country":"Turkey","zipCode":"34000"}',
+              NULL,
+              '[{"id":"DEMO-SKU","name":"Demo product","category1":"Demo","itemType":"VIRTUAL","price":"10050"}]');
             """;
         command.ExecuteNonQuery();
     }
+
+    /// <summary>Reads the order details stored with the order; null when the order has none (it cannot be paid).</summary>
+    public SampleOrderDetails? GetOrderDetails(string orderId)
+    {
+        using var connection = Open(); using var command = connection.CreateCommand();
+        command.CommandText = "SELECT buyer,billing_address,shipping_address,basket_items FROM order_details WHERE order_id=$order";
+        command.Parameters.AddWithValue("$order", orderId); using var reader = command.ExecuteReader();
+        if (!reader.Read()) return null;
+        using var basket = JsonDocument.Parse(reader.GetString(3));
+        var items = basket.RootElement.EnumerateArray().Select(line =>
+            new BasketItem(Text(line, "id")!, Text(line, "name")!, Text(line, "price")!, Text(line, "itemType")!) { Category1 = Text(line, "category1") }).ToArray();
+        return new(Json(reader.GetString(0)), Json(reader.GetString(1)), reader.IsDBNull(2) ? null : Json(reader.GetString(2)), items);
+    }
+
+    private static JsonElement Json(string value) { using var document = JsonDocument.Parse(value); return document.RootElement.Clone(); }
 
     /// <summary>Atomically persists a checkout-attempt key before contacting the gateway.</summary>
     public SampleAttempt? GetOrCreateAttempt(string orderId)

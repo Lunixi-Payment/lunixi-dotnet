@@ -25,10 +25,11 @@ public class PaymentMethodParityTests
         return (client, requests);
     }
 
-    private static DirectMethodPaymentRequest Order(string amount = "10000") => new(amount, "TRY", "ORDER-1");
+    private static DirectMethodPaymentRequest Order(string amount = "10000") => new DirectMethodPaymentRequest(amount, "TRY", "ORDER-1")
+        .WithBuyer(TestOrder.Buyer).WithBillingAddress(TestOrder.Address).WithBasketItems(TestOrder.Basket(amount));
 
     private static object[] Basket(int count) => Enumerable.Range(1, count)
-        .Select(i => (object)new { id = "sku-" + i, name = "Item", itemType = "PHYSICAL", price = "1" }).ToArray();
+        .Select(i => (object)new { id = "sku-" + i, name = "Item", category1 = "Electronics", itemType = "PHYSICAL", price = "1" }).ToArray();
 
     [Fact]
     public void ConstantsMatchTheReferenceValues()
@@ -80,7 +81,8 @@ public class PaymentMethodParityTests
             var request = Assert.Single(requests);
             Assert.Equal("POST", request.Method);
             Assert.Equal("/api/v1/payments/direct/payment", request.PathAndQuery);
-            Assert.Equal("{\"paymentMethod\":\"BANK_TRANSFER\",\"amount\":\"10000\",\"currency\":\"TRY\",\"orderId\":\"ORDER-1\",\"bankTransfer\":{\"bankCode\":\"0062\"}}", request.Body);
+            Assert.StartsWith("{\"paymentMethod\":\"BANK_TRANSFER\",\"amount\":\"10000\",\"currency\":\"TRY\",\"orderId\":\"ORDER-1\",\"buyer\":{", request.Body);
+            Assert.EndsWith(",\"bankTransfer\":{\"bankCode\":\"0062\"}}", request.Body);
             Assert.DoesNotContain("providerCode", request.Body);
             Assert.True(request.Signed);
             Assert.Equal("direct:attempt-0001", request.IdempotencyKey);
@@ -147,18 +149,24 @@ public class PaymentMethodParityTests
                 currency = "TRY",
                 orderId = "O-1",
                 shoppingLoan = new { bankCode = "0062" },
+                buyer = TestOrder.Buyer,
+                billingAddress = TestOrder.Address,
+                shippingAddress = TestOrder.Address,
                 basketItems = Basket(items),
             }, "direct:attempt-0001");
             await Assert.ThrowsAsync<LunixiConfigurationException>(() => Send(0, "100"));
             await Assert.ThrowsAsync<LunixiConfigurationException>(() => Send(101, "101"));
-            Assert.Throws<LunixiConfigurationException>(() => Order().WithMethodFields(PaymentMethods.ShoppingLoan, null, new { bankCode = "0062" }).ToPayload());
+            Assert.Throws<LunixiConfigurationException>(() => new DirectMethodPaymentRequest("10000", "TRY", "ORDER-1")
+                .WithBuyer(TestOrder.Buyer).WithBillingAddress(TestOrder.Address)
+                .WithMethodFields(PaymentMethods.ShoppingLoan, null, new { bankCode = "0062" }).ToPayload());
             Assert.Empty(requests);
             await Send(100, "100");
             using var sent = JsonDocument.Parse(Assert.Single(requests).Body!);
             Assert.Equal(100, sent.RootElement.GetProperty("basketItems").GetArrayLength());
         }
         var typed = Order("2").WithMethodFields(PaymentMethods.ShoppingLoan, null, new { bankCode = "0062" })
-            .WithBasketItems([new BasketItem("sku-1", "Phone", "2") { ProductCategory = ProductCategories.MobilePhone }]).ToPayload();
+            .WithShippingAddress(TestOrder.Address)
+            .WithBasketItems([new BasketItem("sku-1", "Phone", "2") { Category1 = "Electronics", ProductCategory = ProductCategories.MobilePhone }]).ToPayload();
         Assert.Equal("MOBILE_PHONE", typed.GetProperty("basketItems")[0].GetProperty("productCategory").GetString());
     }
 
@@ -198,8 +206,10 @@ public class PaymentMethodParityTests
         Assert.Throws<LunixiConfigurationException>(() => Order().WithMethodFields(PaymentMethods.Wallet, "wallet-1").WithPromissoryNoteCount(2).ToPayload());
 
         var schedule = Note().WithPromissoryNoteSchedule([new("5000", "2027-01-15"), new("5000", "2027-01-15")]).ToPayload();
-        Assert.Equal("{\"paymentMethod\":\"PROMISSORY_NOTE\",\"amount\":\"10000\",\"currency\":\"TRY\",\"orderId\":\"ORDER-1\",\"promissoryNote\":{\"providerCode\":\"note-provider\",\"debtorName\":\"Synthetic Buyer\",\"schedule\":[{\"amount\":\"5000\",\"dueDate\":\"2027-01-15\"},{\"amount\":\"5000\",\"dueDate\":\"2027-01-15\"}]}}",
-            Encoding.UTF8.GetString(CanonicalJson.Serialize(schedule)));
+        var scheduleJson = Encoding.UTF8.GetString(CanonicalJson.Serialize(schedule));
+        Assert.StartsWith("{\"paymentMethod\":\"PROMISSORY_NOTE\",\"amount\":\"10000\",\"currency\":\"TRY\",\"orderId\":\"ORDER-1\",\"buyer\":{", scheduleJson);
+        Assert.EndsWith(",\"promissoryNote\":{\"providerCode\":\"note-provider\",\"debtorName\":\"Synthetic Buyer\",\"schedule\":[{\"amount\":\"5000\",\"dueDate\":\"2027-01-15\"},{\"amount\":\"5000\",\"dueDate\":\"2027-01-15\"}]}}",
+            scheduleJson);
         Assert.Equal("3", Note().WithPromissoryNoteCount(3).ToPayload().GetProperty("promissoryNote").GetProperty("noteCount").GetString());
         await client.Payments.DirectMethodPaymentAsync(new
         {
@@ -208,8 +218,13 @@ public class PaymentMethodParityTests
             currency = "TRY",
             orderId = "O-1",
             promissoryNote = new { providerCode = "note-provider", noteCount = 4 },
+            buyer = TestOrder.Buyer,
+            billingAddress = TestOrder.Address,
+            basketItems = TestOrder.BasketJson("10000"),
         }, "direct:attempt-0001");
-        Assert.Equal("{\"paymentMethod\":\"PROMISSORY_NOTE\",\"amount\":\"10000\",\"currency\":\"TRY\",\"orderId\":\"O-1\",\"promissoryNote\":{\"providerCode\":\"note-provider\",\"noteCount\":\"4\"}}", Assert.Single(requests).Body);
+        var sent = Assert.Single(requests).Body;
+        Assert.StartsWith("{\"paymentMethod\":\"PROMISSORY_NOTE\",\"amount\":\"10000\",\"currency\":\"TRY\",\"orderId\":\"O-1\",\"promissoryNote\":{\"providerCode\":\"note-provider\",\"noteCount\":\"4\"},\"buyer\":{", sent);
+        Assert.EndsWith(",\"basketItems\":[{\"id\":\"SKU-1\",\"name\":\"Gift card\",\"category1\":\"Digital\",\"itemType\":\"VIRTUAL\",\"price\":\"10000\"}]}", sent);
     }
 
     [Fact]
@@ -383,6 +398,9 @@ public class PaymentMethodParityTests
             currency = "TRY",
             ownerRef = "owner",
             legs = new object[] { new { paymentMethod = "PROMISSORY_NOTE", amount = "100", promissoryNote = new { providerCode = "note-1", noteCount = "3" } } },
+            buyer = TestOrder.Buyer,
+            billingAddress = TestOrder.Address,
+            basketItems = TestOrder.BasketJson("100"),
         });
         Assert.Equal("3", notes.Payload.GetProperty("legs")[0].GetProperty("promissoryNote").GetProperty("noteCount").GetString());
         Assert.Throws<LunixiConfigurationException>(() => new SplitPaymentRequest(new

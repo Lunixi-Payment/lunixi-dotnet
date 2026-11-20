@@ -26,6 +26,7 @@ Bağımlılıklar için normal NuGet kaynağınızı açık tutun veya SDK proje
 ## İstemci ve ödeme formu
 
 ```csharp
+using System.Text.Json;
 using Lunixi;
 
 var lunixi = new LunixiClient(new LunixiOptions
@@ -35,10 +36,23 @@ var lunixi = new LunixiClient(new LunixiOptions
     PrivateKeyPem = Environment.GetEnvironmentVariable("LUNIXI_PRIVATE_KEY_PEM")!,
 });
 
+// Her ödemenin istediği sipariş bilgileri: ödeme sayfanızdan alın, yer tutucu kullanmayın.
+var buyer = JsonSerializer.SerializeToElement(new
+{
+    name = "Ada", surname = "Yılmaz", identityNumber = "11111111111", email = "ada@example.com",
+    gsmNumber = "+905350000000", city = "Istanbul", country = "Turkey", zipCode = "34000",
+});
+var billingAddress = JsonSerializer.SerializeToElement(new
+{
+    contactName = "Ada Yılmaz", address = "Örnek Sok. No: 1", city = "Istanbul", country = "Turkey", zipCode = "34000",
+});
+
 var request = new CreateIntentRequest("10050", "TRY", "ORDER-1001")
 {
     CallbackUrl = new Uri("https://merchant.example/payments/return"),
-    BasketItems = [new BasketItem("SKU-1", "Örnek ürün", "10050")],
+    Buyer = buyer,
+    BillingAddress = billingAddress,
+    BasketItems = [new BasketItem("SKU-1", "Hediye kartı", "10050", "VIRTUAL") { Category1 = "Dijital" }],
     EnabledInstallments = [1, 2, 3], // isteğe bağlı: en fazla 3 taksit
 };
 // Anahtarı kalıcı ödeme denemesinden okuyun; ağ hatasından sonra aynı anahtarı kullanın.
@@ -49,7 +63,9 @@ var token = response.Data.GetProperty("token").GetString();
 
 Uygulama başına tek istemci oluşturun; kapanışta dispose edin. TEST/LIVE ortamını anahtar belirler. Açık Ed25519 anahtarını panelde kaydedin; PKCS#8 PEM özel anahtarı yalnız sunucuda tutun. `Ed25519Signer.GenerateKeyPair()` ikisini de üretir. → [Kimlik doğrulama](/getting-started/authentication)
 
-Tutarlar pozitif kanonik alt birim string değerleridir: `"10050"` = 100,50 TRY. Tutarı sipariş veritabanından okuyun. Sepet `Price` değeri satırın tamamının tutarıdır; satır toplamı `Amount` ile eşit olmalıdır. Eski üst düzey tutar alanları reddedilir. Akış gerektiriyorsa alıcı/fatura/teslimat JSON bilgisini güvenilir sunucu kaydından ekleyin. İsteğe bağlı `BasketItem.ProductCategory` (`productCategory` olarak gönderilir) Lunixi ürün kategorisidir; yasal taksit sınırı olan ödeme yöntemleri (ör. alışveriş kredisi) ve diğer platform özellikleri tarafından kullanılır. Değer için `ProductCategories` sabitlerini kullanın (`ProductCategories.All` bu sürümün bildiği kodları listeler). Null bırakılırsa alan gönderilmez ve mevcut davranış korunur; bilinmeyen kod API tarafından HTTP 400 ile reddedilir. Sözlük yalnız sona ekleme ile büyür; özellik bu yüzden string'dir.
+Her ödeme gövdesi sipariş bilgilerini taşır (`OrderDetails`): `buyer` (`name`, `surname`, `identityNumber` — T.C. kimlik veya pasaport numarası, `email` — ASCII, `gsmNumber`, `city`, `country`, `zipCode`, `ip` — alıcının tarayıcı IP'si), `billingAddress` (`contactName`, `address`, `city`, `country`, `zipCode`) ve en az bir `basketItems` satırı (`id`, `name`, `category1`, `itemType`, `price`; fiyatların toplamı tutara eşittir); `PHYSICAL` bir satır `shippingAddress` de ister. `CreateIntentRequest` ve pazaryeri intent'lerinde `ip` gönderilmeyebilir: Lunixi formu IP'yi alıcının tarayıcısından alır. `CreateIntentAsync`, `CreateMarketplaceIntentAsync`, `DirectMethodPaymentAsync`, `SplitPaymentRequest`, pazaryeri `CreateCheckoutIntentAsync` ve kart çekimleri, `StoreCardAsync` (yalnız alıcı ve fatura adresi) ve `Wallet.Topups.StartCardAsync` (alıcı ve fatura adresi) eksik yolları adlandıran `LunixiConfigurationException` ile istek göndermeden durur (`OrderDetails.MissingFields(body)` aynı listeyi döndürür, örneğin `buyer.email` veya `basketItems.0.category1`). Gateway eksik alanı HTTP 400 `payment.order.field_required`, geçersiz alanı `payment.order.field_invalid` ile yanıtlar (`OrderFieldErrorCodes`, `OrderFieldReasons`).
+
+Tutarlar pozitif kanonik alt birim string değerleridir: `"10050"` = 100,50 TRY. Tutarı sipariş veritabanından okuyun. Sepet `Price` değeri satırın tamamının tutarıdır; satır toplamı `Amount` ile eşit olmalıdır. Eski üst düzey tutar alanları reddedilir. Alıcı, fatura ve teslimat JSON bilgisini güvenilir sunucu kaydından okuyun. İsteğe bağlı `BasketItem.ProductCategory` (`productCategory` olarak gönderilir) Lunixi ürün kategorisidir; yasal taksit sınırı olan ödeme yöntemleri (ör. alışveriş kredisi) ve diğer platform özellikleri tarafından kullanılır. Değer için `ProductCategories` sabitlerini kullanın (`ProductCategories.All` bu sürümün bildiği kodları listeler). Null bırakılırsa alan gönderilmez ve mevcut davranış korunur; bilinmeyen kod API tarafından HTTP 400 ile reddedilir. Sözlük yalnız sona ekleme ile büyür; özellik bu yüzden string'dir.
 
 `EnabledInstallments` bu ödeme için formun sunacağı taksit sayılarını yalnızca daraltır (`[1]` = yalnız tek çekim); form, panel ayarlarınızın, kartın ve platform üst sınırının da izin verdiği sayıları gösterir, null kısıt yok demektir. Sayılar 1–36 arası, tekrarsız olmalı ve 1'i içermelidir; aksi hâlde `CreateIntentAsync` istek göndermeden `LunixiConfigurationException` fırlatır. Liste `enabledInstallments` olarak artan sırada gönderilir.
 
@@ -144,7 +160,7 @@ var taxonomy = await lunixi.Payments.CardTaxonomyAsync();
 
 `InstallmentOptionsAsync` taksit tablosunu döndürür; BIN ile birlikte 1'den büyük taksit sayısında `DirectMethodPaymentRequest.WithInstallment(count, quoteToken)` için gereken `quoteToken` değerini de döndürür. `EnabledInstallments` intent kuralını izler (1–36, tekrarsız, 1 dahil, artan sırada gönderilir). BIN veya PAN öneki 6–19 hane olmalıdır ve hiçbir hata mesajına konmaz.
 
-Saklı kartlar: `StoreCardAsync(new StoreCardRequest(card, cardUserKey, callbackUrl), persistedKey)` (imzalı, idempotency anahtarı zorunlu) `storedCardToken` değerini döndürür; `ListStoredCardsAsync(cardUserKey)`, `GetStoredCardAsync(storedCardToken)` ve `DeactivateStoredCardAsync(storedCardToken, persistedKey)` (imzalı, anahtar zorunlu) kartları yönetir. `StoreCardRequest.ToString()` kart bilgisini gizler.
+Saklı kartlar: `StoreCardAsync(new StoreCardRequest(card, cardUserKey, callbackUrl) { Buyer = buyer, BillingAddress = billingAddress }, persistedKey)` (imzalı, idempotency anahtarı zorunlu; alıcı ve fatura adresi zorunlu) `storedCardToken` değerini döndürür; `ListStoredCardsAsync(cardUserKey)`, `GetStoredCardAsync(storedCardToken)` ve `DeactivateStoredCardAsync(storedCardToken, persistedKey)` (imzalı, anahtar zorunlu) kartları yönetir. `StoreCardRequest.ToString()` kart bilgisini gizler.
 
 `CreateMarketplaceIntentAsync(intent, [new MarketplaceSeller("dealer-a", "10000"), new MarketplaceSeller("dealer-b", "5000")], persistedKey, MarketplaceSellerPolicies.AllOrNothing)` barındırılan intent gövdesine `sellers[]` ekler; satıcıların `amountMinor` değerlerinin toplamı intent tutarına tam eşit olmalıdır, aksi hâlde SDK göndermeden önce hata fırlatır. Raporlar: `FailoverRecoveryAnalyticsAsync(filters)` ve `ProviderCredentialAnalyticsAsync(credentialId, filters)`.
 
@@ -277,7 +293,12 @@ BasketItem premiumItem = InsuranceClient.PremiumBasketItem(order, "Travel insura
 ## Abonelik
 
 ```csharp
-var customer = await lunixi.Subscriptions.Customers.UpsertAsync(new { externalId = "user-42", email = "ada@example.com" }, persistedCustomerKey);
+var customer = await lunixi.Subscriptions.Customers.UpsertAsync(new
+{
+    externalId = "user-42", name = "Ada", surname = "Yilmaz", email = "ada@example.com", gsmNumber = "+905350000000",
+    identityNumber = "11111111111", billingAddress = "Example Street 1", billingCity = "Istanbul", billingCountry = "Turkey",
+    billingZipCode = "34000",
+}, persistedCustomerKey);
 var plan = await lunixi.Subscriptions.Plans.CreateAsync(new
 {
     productId, code = "pro-monthly", name = "Pro", price = "9900", currency = "TRY",
@@ -311,7 +332,11 @@ if (IdentitySignals.IsDeviceShared(links)) { /* one device, several accounts: re
 ```csharp
 MarketplaceSeller[] sellers = [new("dealer-a", "60000"), new("dealer-b", "40000")];
 var intent = await lunixi.Marketplace.CreateCheckoutIntentAsync(
-    new CreateIntentRequest("100000", "TRY", "ORDER-7"), sellers, MarketplaceSellerPolicies.AllOrNothing, persistedIntentKey);
+    new CreateIntentRequest("100000", "TRY", "ORDER-7")
+    {
+        Buyer = buyer, BillingAddress = billingAddress, // sipariş bilgileri ödeme örneğindeki gibi
+        BasketItems = [new BasketItem("SKU-7", "Hediye kartı", "100000", "VIRTUAL") { Category1 = "Dijital" }],
+    }, sellers, MarketplaceSellerPolicies.AllOrNothing, persistedIntentKey);
 
 var dealer = await lunixi.Marketplace.CreateDealerAsync(new { legalName = "Acme Ltd", dealerType = MarketplaceDealerTypes.LegalEntity });
 var link = await lunixi.Marketplace.OnboardingTokenAsync(dealer.GetProperty("id").GetString()!);

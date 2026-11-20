@@ -3,7 +3,13 @@ using System.Text.Json.Serialization;
 
 namespace Lunixi;
 
-/// <summary>A hosted payment intent. Amount is the basket total in integer minor units, excluding installment fees.</summary>
+/// <summary>
+/// A hosted payment intent. Amount is the basket total in integer minor units, excluding installment fees. The order details
+/// are required (<see cref="OrderDetails"/>): <see cref="Buyer"/> (<c>ip</c> may be left out here: the Lunixi form takes it
+/// from the buyer's browser), <see cref="BillingAddress"/> and at least one of <see cref="BasketItems"/>;
+/// <see cref="ShippingAddress"/> when an item is <c>PHYSICAL</c>. <see cref="PaymentsClient.CreateIntentAsync"/> throws
+/// <see cref="LunixiConfigurationException"/> naming the missing paths before any request.
+/// </summary>
 public sealed class CreateIntentRequest
 {
     /// <summary>Positive basket total in minor units.</summary>
@@ -16,13 +22,16 @@ public sealed class CreateIntentRequest
     public Uri? CallbackUrl { get; init; }
     /// <summary>True to authorize for later capture; false or absent to charge immediately.</summary>
     public bool? Preauth { get; init; }
-    /// <summary>Buyer data following the public gateway DTO; do not log it.</summary>
+    /// <summary>
+    /// The buyer (required, a JSON object; do not log it): <see cref="OrderDetails.BuyerRequiredFields"/>, except <c>ip</c>,
+    /// which the Lunixi form takes from the buyer's browser when left out.
+    /// </summary>
     public JsonElement? Buyer { get; init; }
-    /// <summary>Billing address following the public gateway address DTO.</summary>
+    /// <summary>The billing address (required, a JSON object with <see cref="OrderDetails.AddressRequiredFields"/>).</summary>
     public JsonElement? BillingAddress { get; init; }
-    /// <summary>Shipping address following the public gateway address DTO.</summary>
+    /// <summary>The shipping address (a JSON object with <see cref="OrderDetails.AddressRequiredFields"/>); required when an item is <c>PHYSICAL</c>.</summary>
     public JsonElement? ShippingAddress { get; init; }
-    /// <summary>Basket lines. Their price sum must equal Amount.</summary>
+    /// <summary>Basket lines (required, at least one, each with <see cref="BasketItem.Category1"/>). Their price sum must equal Amount.</summary>
     public IReadOnlyList<BasketItem>? BasketItems { get; init; }
     /// <summary>Your customer reference, when applicable.</summary>
     public string? CustomerId { get; init; }
@@ -82,7 +91,7 @@ public sealed class BasketItem
     public string ItemType { get; }
     /// <summary>Line total in positive integer minor units.</summary>
     public string Price { get; }
-    /// <summary>The item's primary category, if used by the gateway.</summary>
+    /// <summary>The item's primary category (required by the gateway; <see cref="OrderDetails.BasketItemRequiredFields"/>).</summary>
     public string? Category1 { get; init; }
     /// <summary>The item's secondary category.</summary>
     public string? Category2 { get; init; }
@@ -108,10 +117,14 @@ public sealed class PaymentsClient
     private const string BinPath = "/api/v1/bin";
     private readonly LunixiClient client;
     internal PaymentsClient(LunixiClient client) => this.client = client;
-    /// <summary>Creates a hosted intent with one persisted idempotency key per checkout attempt.</summary>
+    /// <summary>
+    /// Creates a hosted intent with one persisted idempotency key per checkout attempt. The order details are checked before
+    /// sending (<see cref="OrderDetails"/>; <c>buyer.ip</c> may be left out).
+    /// </summary>
     public Task<LunixiResponse> CreateIntentAsync(CreateIntentRequest request, string idempotencyKey, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(request); request.Validate(); Validation.IdempotencyKey(idempotencyKey);
+        ArgumentNullException.ThrowIfNull(request); request.Validate();
+        OrderDetails.Require(CanonicalJson.Element(request), "A payment intent", checkoutIntent: true); Validation.IdempotencyKey(idempotencyKey);
         return client.SendAsync(HttpMethod.Post, BasePath + "/intents", request, idempotencyKey, cancellationToken: cancellationToken);
     }
     /// <summary>Reads a payment's current status for reconciliation.</summary>
@@ -173,7 +186,7 @@ public sealed class PaymentsClient
     /// <summary>
     /// Sends a raw <c>direct/payment</c> body after the same checks as <see cref="DirectMethodPaymentRequest"/>: known fields
     /// only, exactly the chosen method's block, card fields only with <c>CARD</c>, block structure, promissory-note plan,
-    /// shopping-loan basket and no <c>providerCode</c> for <c>BANK_TRANSFER</c>.
+    /// shopping-loan basket, no <c>providerCode</c> for <c>BANK_TRANSFER</c> and the order details (<see cref="OrderDetails"/>).
     /// </summary>
     public Task<LunixiResponse> DirectMethodPaymentAsync(object payload, string idempotencyKey, CancellationToken cancellationToken = default)
     {
@@ -233,12 +246,14 @@ public sealed class PaymentsClient
     /// Creates a marketplace hosted intent (<c>POST /api/v1/payments/marketplace/intents</c>, signed): the intent body plus
     /// <c>sellers[]</c> (<c>subDealerId</c>, <c>amountMinor</c>, optional <c>scenario</c>) and, when given,
     /// <c>multiSellerPolicy</c> (<see cref="MarketplaceSellerPolicies"/>). The sellers' shares must add up exactly to the
-    /// intent amount; any other total throws before a request is sent. Reuse the idempotency key on retry.
+    /// intent amount; any other total throws before a request is sent. The order details are checked as for
+    /// <see cref="CreateIntentAsync"/> (<c>buyer.ip</c> may be left out). Reuse the idempotency key on retry.
     /// </summary>
     public Task<LunixiResponse> CreateMarketplaceIntentAsync(CreateIntentRequest request, IReadOnlyList<MarketplaceSeller> sellers, string idempotencyKey,
         string? multiSellerPolicy = null, CancellationToken cancellationToken = default)
     {
-        var body = CardValidation.MarketplaceIntent(request, sellers, multiSellerPolicy); Validation.IdempotencyKey(idempotencyKey);
+        var body = CardValidation.MarketplaceIntent(request, sellers, multiSellerPolicy);
+        OrderDetails.Require(body, "A marketplace payment intent", checkoutIntent: true); Validation.IdempotencyKey(idempotencyKey);
         return client.SendAsync(HttpMethod.Post, BasePath + "/marketplace/intents", body, idempotencyKey, cancellationToken: cancellationToken);
     }
     /// <summary>
@@ -264,12 +279,13 @@ public sealed class PaymentsClient
         => client.SendAsync(HttpMethod.Get, BinPath + "/card-taxonomy", signed: false, cancellationToken: cancellationToken);
     /// <summary>
     /// Verifies and stores a card (<c>POST /api/v1/payments/cards</c>, signed). The idempotency key is required; reuse it when
-    /// retrying the same card. The answer carries the <c>storedCardToken</c>, never the card number.
+    /// retrying the same card. The buyer and the billing address are required (no basket; <see cref="OrderDetails"/>). The
+    /// answer carries the <c>storedCardToken</c>, never the card number.
     /// </summary>
     public Task<LunixiResponse> StoreCardAsync(StoreCardRequest request, string idempotencyKey, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var body = request.ToPayload(); Validation.IdempotencyKey(idempotencyKey);
+        var body = request.ToPayload(); OrderDetails.Require(body, "Storing a card", basket: false); Validation.IdempotencyKey(idempotencyKey);
         return client.SendAsync(HttpMethod.Post, BasePath + "/cards", body, idempotencyKey, cancellationToken: cancellationToken);
     }
     /// <summary>Lists the stored cards of one card owner (<c>GET /api/v1/payments/cards?cardUserKey=</c>).</summary>
@@ -299,7 +315,10 @@ public sealed class PaymentsClient
         var path = BasePath + "/analytics/provider-credentials/" + Validation.Id(credentialId);
         return client.SendAsync(HttpMethod.Get, path + RequestValidation.ReportQuery(filters), signed: false, cancellationToken: cancellationToken);
     }
-    /// <summary>Creates or continues a validated split payment, using the same persisted key throughout the flow.</summary>
+    /// <summary>
+    /// Creates or continues a validated split payment, using the same persisted key throughout the flow. The body carries the
+    /// order details (<see cref="OrderDetails"/>), checked when the <see cref="SplitPaymentRequest"/> is built.
+    /// </summary>
     public async Task<LunixiResponse> CreateSplitAsync(SplitPaymentRequest request, string idempotencyKey, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request); Validation.IdempotencyKey(idempotencyKey);

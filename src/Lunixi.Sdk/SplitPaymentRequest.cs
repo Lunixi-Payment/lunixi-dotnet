@@ -5,8 +5,15 @@ namespace Lunixi;
 /// <summary>Field lists of the split-payment endpoints (gateway DTOs; an unknown field is rejected with HTTP 400).</summary>
 public static class SplitPaymentFields
 {
-    /// <summary>Body fields of <c>POST /api/v1/payments/split</c>.</summary>
-    public static IReadOnlyList<string> Payment { get; } = Array.AsReadOnly(new[] { "totalAmount", "currency", "ownerRef", "legs", "orderId", "ownerScope", "callbackUrl" });
+    /// <summary>
+    /// Body fields of <c>POST /api/v1/payments/split</c>. The order details (<c>buyer</c>, <c>billingAddress</c>,
+    /// <c>basketItems</c>, <c>shippingAddress</c> for a <c>PHYSICAL</c> item) are required (<see cref="OrderDetails"/>).
+    /// </summary>
+    public static IReadOnlyList<string> Payment { get; } = Array.AsReadOnly(new[]
+    {
+        "totalAmount", "currency", "ownerRef", "legs", "orderId", "ownerScope", "callbackUrl",
+        "buyer", "billingAddress", "shippingAddress", "basketItems",
+    });
     /// <summary>
     /// Method blocks a non-card leg can carry: <c>mobileBilling</c>, <c>wallet</c>, <c>promissoryNote</c>. Meal card, open
     /// banking, shopping loan and bank transfer cannot be split payment legs.
@@ -43,7 +50,12 @@ public static class SplitPaymentEvents
     public const string LegEventsSubscription = "payment.split.leg_events";
 }
 
-/// <summary>A validated split-payment DTO. It accepts tokenized cards and the gateway's currently supported method blocks.</summary>
+/// <summary>
+/// A validated split-payment DTO. It accepts tokenized cards and the gateway's currently supported method blocks. The body
+/// carries the order details every leg goes to the payment provider with: <c>buyer</c>, <c>billingAddress</c>, at least one
+/// <c>basketItems</c> entry (their <c>price</c> values add up to <c>totalAmount</c>) and <c>shippingAddress</c> when an item
+/// is <c>PHYSICAL</c> (<see cref="OrderDetails"/>).
+/// </summary>
 public sealed class SplitPaymentRequest
 {
     internal static readonly HashSet<string> InProgress = ["COMPOSING", "AUTHORIZING", "AWAITING_3DS", "AWAITING_ACTION", "AWAITING_CREDIT_APPROVAL", "AWAITING_REPLACEMENT_CARD", "AUTHORIZED", "CAPTURING"];
@@ -51,7 +63,10 @@ public sealed class SplitPaymentRequest
     private static IReadOnlyList<string> LegFields => SplitPaymentFields.Leg;
     /// <summary>The validated immutable JSON request body.</summary>
     public JsonElement Payload { get; }
-    /// <summary>Validates the public split DTO, including exact leg totals, known fields and distinct card/provider references.</summary>
+    /// <summary>
+    /// Validates the public split DTO, including exact leg totals, known fields, distinct card/provider references and the
+    /// order details; a missing order field throws <see cref="LunixiConfigurationException"/> naming its path.
+    /// </summary>
     public SplitPaymentRequest(object payload)
     {
         var body = CanonicalJson.Element(payload);
@@ -123,6 +138,7 @@ public sealed class SplitPaymentRequest
             }
         }
         if (sum != amount) throw new LunixiConfigurationException("Split leg amounts must sum exactly to totalAmount.");
+        OrderDetails.Require(body, "A split payment");
         Payload = body;
     }
     /// <summary>Returns no stored-card tokens or provider input values.</summary>

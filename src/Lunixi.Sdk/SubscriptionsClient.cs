@@ -207,7 +207,12 @@ public sealed class SubscriptionCustomersClient
     private readonly RouteTableInvoker invoker;
     internal SubscriptionCustomersClient(RouteTableInvoker invoker) => this.invoker = invoker;
 
-    /// <summary>Creates or updates a customer: <c>{ externalId, email?, name?, phone?, locale?, metadata? }</c>.</summary>
+    /// <summary>
+    /// Creates or updates a customer: <c>{ externalId, name, surname, email, gsmNumber, identityNumber, billingAddress,
+    /// billingCity, billingCountry, billingZipCode, billingContactName?, shippingContactName?, shippingAddress?, shippingCity?,
+    /// shippingCountry?, shippingZipCode? }</c>. Renewals take the buyer from this record; the gateway answers a missing or
+    /// invalid field with <see cref="SubscriptionCustomerErrorCodes"/>.
+    /// </summary>
     public Task<JsonElement> UpsertAsync(object request, string? idempotencyKey = null, CancellationToken cancellationToken = default)
         => invoker.DataAsync("customers.upsert", body: RouteTableInvoker.Changes(request, "customers.upsert"), idempotencyKey: idempotencyKey,
             cancellationToken: cancellationToken);

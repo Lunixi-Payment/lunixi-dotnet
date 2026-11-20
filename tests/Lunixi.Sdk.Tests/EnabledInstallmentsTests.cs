@@ -20,7 +20,7 @@ public class EnabledInstallmentsTests
     {
         using var client = new LunixiClient(TestOptions.Create(), new FakeHandler((_, _) => throw new Xunit.Sdk.XunitException("No network expected")));
         await Assert.ThrowsAsync<LunixiConfigurationException>(() => client.Payments.CreateIntentAsync(
-            new("10050", "TRY", "order-1") { EnabledInstallments = counts }, "checkout:attempt-1"));
+            TestOrder.Intent("10050", "TRY", "order-1", counts), "checkout:attempt-1"));
     }
 
     [Fact]
@@ -34,7 +34,7 @@ public class EnabledInstallmentsTests
             return FakeHandler.Json("{\"data\":{\"token\":\"ct_example\"}}");
         }));
         var counts = new[] { 6, 1, 3 };
-        await client.Payments.CreateIntentAsync(new("10050", "TRY", "order-1") { EnabledInstallments = counts }, "checkout:attempt-1");
+        await client.Payments.CreateIntentAsync(TestOrder.Intent("10050", "TRY", "order-1", counts), "checkout:attempt-1");
         using var sent = JsonDocument.Parse(body!);
         Assert.Equal(new[] { 1, 3, 6 }, sent.RootElement.GetProperty("enabledInstallments").EnumerateArray().Select(e => e.GetInt32()));
         Assert.Equal(new[] { 6, 1, 3 }, counts);
@@ -50,7 +50,7 @@ public class EnabledInstallmentsTests
             body = await request.Content!.ReadAsStringAsync(token);
             return FakeHandler.Json("{\"data\":{\"token\":\"ct_example\"}}");
         }));
-        await client.Payments.CreateIntentAsync(new("10050", "TRY", "order-1"), "checkout:attempt-1");
+        await client.Payments.CreateIntentAsync(TestOrder.Intent("10050", "TRY", "order-1"), "checkout:attempt-1");
         using var sent = JsonDocument.Parse(body!);
         Assert.False(sent.RootElement.TryGetProperty("enabledInstallments", out _));
     }
@@ -62,6 +62,6 @@ public class EnabledInstallmentsTests
     {
         using var client = new LunixiClient(TestOptions.Create(), new FakeHandler((request, _) => Task.FromResult(request.RequestUri!.AbsolutePath.EndsWith("/auth/token")
             ? FakeHandler.Json("{\"access_token\":\"token\"}") : FakeHandler.Json("{\"data\":{\"token\":\"ct_example\"}}"))));
-        await client.Payments.CreateIntentAsync(new("10050", "TRY", "order-1") { EnabledInstallments = counts }, "checkout:attempt-1");
+        await client.Payments.CreateIntentAsync(TestOrder.Intent("10050", "TRY", "order-1", counts), "checkout:attempt-1");
     }
 }

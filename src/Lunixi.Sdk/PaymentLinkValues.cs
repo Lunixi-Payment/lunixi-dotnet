@@ -73,15 +73,17 @@ public static class PaymentLinkEnvironments
     public const string Live = "LIVE";
 }
 
-/// <summary>Whether the payment page asks the buyer for a detail (<c>buyerFields</c> values).</summary>
+/// <summary>
+/// Value of a <c>buyerFields</c> entry. Payment providers require the buyer, the identity number and the billing address, so
+/// the link page always asks all five fields: <see cref="Required"/> is the only value (the gateway answers any other with
+/// HTTP 400; leaving a field out means <c>REQUIRED</c>).
+/// </summary>
 public static class BuyerFieldRequirements
 {
-    /// <summary><c>HIDDEN</c></summary>
-    public const string Hidden = "HIDDEN";
-    /// <summary><c>OPTIONAL</c></summary>
-    public const string Optional = "OPTIONAL";
     /// <summary><c>REQUIRED</c></summary>
     public const string Required = "REQUIRED";
+    /// <summary>Every accepted value.</summary>
+    public static IReadOnlyList<string> All { get; } = Array.AsReadOnly(new[] { Required });
 }
 
 /// <summary>Types of a custom question on the payment page (<see cref="PaymentLinkCustomField"/>). File uploads are not offered.</summary>

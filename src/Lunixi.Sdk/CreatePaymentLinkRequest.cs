@@ -110,14 +110,15 @@ public sealed class CreatePaymentLinkRequest : IPaymentLinkJson
     /// <summary>Requires the buyer to accept your terms before paying.</summary>
     public CreatePaymentLinkRequest WithTermsAcceptanceRequired(bool required = true) => Set("requireTermsAcceptance", required);
     /// <summary>
-    /// Which buyer details the page asks for: keys <c>name</c>, <c>email</c>, <c>phone</c>, <c>address</c>,
-    /// <c>identityNumber</c>, each <see cref="BuyerFieldRequirements"/>; null clears it.
+    /// Buyer details the page asks for: keys <c>name</c>, <c>email</c>, <c>phone</c>, <c>address</c>, <c>identityNumber</c>,
+    /// each <see cref="BuyerFieldRequirements.Required"/> (the page always asks all five; a field left out is also required);
+    /// null clears it.
     /// </summary>
     public CreatePaymentLinkRequest WithBuyerFields(IReadOnlyDictionary<string, string>? buyerFields)
     {
         if (buyerFields is not null)
             foreach (var pair in buyerFields)
-                PaymentLinkValidation.OneOf(pair.Value, [BuyerFieldRequirements.Hidden, BuyerFieldRequirements.Optional, BuyerFieldRequirements.Required], "buyerFields." + pair.Key);
+                PaymentLinkValidation.OneOf(pair.Value, BuyerFieldRequirements.All, "buyerFields." + pair.Key);
         return Set("buyerFields", PaymentLinkValidation.StringObject(buyerFields, PaymentLinkFields.BuyerFields, "buyerFields"));
     }
     /// <summary>Questions the buyer answers on the payment page. Replaces questions added before.</summary>
