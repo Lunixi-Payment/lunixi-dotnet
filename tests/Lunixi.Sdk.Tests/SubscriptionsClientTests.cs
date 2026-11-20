@@ -83,8 +83,15 @@ public class SubscriptionsClientTests
             }, "idem-plan-0001");
             await subscriptions.Customers.UpsertAsync(new
             {
-                externalId = "u-42", name = "Ada", surname = "Yilmaz", email = "ada@example.com", gsmNumber = "+905350000000",
-                identityNumber = "11111111111", billingAddress = "Example Street 1", billingCity = "Istanbul", billingCountry = "Turkey",
+                externalId = "u-42",
+                name = "Ada",
+                surname = "Yilmaz",
+                email = "ada@example.com",
+                gsmNumber = "+905350000000",
+                identityNumber = "11111111111",
+                billingAddress = "Example Street 1",
+                billingCity = "Istanbul",
+                billingCountry = "Turkey",
                 billingZipCode = "34000",
             }, "idem-cus-0001");
             await subscriptions.Customers.GetByExternalIdAsync("u-42");
@@ -193,9 +200,17 @@ public class SubscriptionsClientTests
             Assert.Contains("surname", customer.Message);
             await Assert.ThrowsAsync<LunixiConfigurationException>(() => subscriptions.Customers.UpsertAsync(new
             {
-                externalId = "u-42", name = "Ada", surname = "Yilmaz", email = "ada@example.com", gsmNumber = "+905350000000",
-                identityNumber = "11111111111", billingAddress = "Example Street 1", billingCity = "Istanbul", billingCountry = "Turkey",
-                billingZipCode = "34000", locale = "tr",
+                externalId = "u-42",
+                name = "Ada",
+                surname = "Yilmaz",
+                email = "ada@example.com",
+                gsmNumber = "+905350000000",
+                identityNumber = "11111111111",
+                billingAddress = "Example Street 1",
+                billingCity = "Istanbul",
+                billingCountry = "Turkey",
+                billingZipCode = "34000",
+                locale = "tr",
             }));
 
             await Assert.ThrowsAsync<LunixiConfigurationException>(() => subscriptions.Plans.ListAsync(new Dictionary<string, object?> { ["archived"] = true }));

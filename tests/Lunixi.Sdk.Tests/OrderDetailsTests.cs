@@ -8,13 +8,24 @@ internal static class TestOrder
 {
     public static JsonElement Buyer { get; } = JsonSerializer.SerializeToElement(new
     {
-        name = "Ada", surname = "Yilmaz", identityNumber = "11111111111", email = "ada@example.com", gsmNumber = "+905350000000",
-        city = "Istanbul", country = "Turkey", zipCode = "34000", ip = "203.0.113.10",
+        name = "Ada",
+        surname = "Yilmaz",
+        identityNumber = "11111111111",
+        email = "ada@example.com",
+        gsmNumber = "+905350000000",
+        city = "Istanbul",
+        country = "Turkey",
+        zipCode = "34000",
+        ip = "203.0.113.10",
     });
 
     public static JsonElement Address { get; } = JsonSerializer.SerializeToElement(new
     {
-        contactName = "Ada Yilmaz", address = "Example Street 1", city = "Istanbul", country = "Turkey", zipCode = "34000",
+        contactName = "Ada Yilmaz",
+        address = "Example Street 1",
+        city = "Istanbul",
+        country = "Turkey",
+        zipCode = "34000",
     });
 
     public static BasketItem[] Basket(string price) => [new("SKU-1", "Gift card", price, "VIRTUAL") { Category1 = "Digital" }];
@@ -28,7 +39,9 @@ internal static class TestOrder
     /// <summary>The order details as JSON nodes, for raw dictionary bodies.</summary>
     public static Dictionary<string, object?> Fields(string price) => new()
     {
-        ["buyer"] = Buyer, ["billingAddress"] = Address, ["basketItems"] = BasketJson(price),
+        ["buyer"] = Buyer,
+        ["billingAddress"] = Address,
+        ["basketItems"] = BasketJson(price),
     };
 }
 
@@ -87,8 +100,14 @@ public class OrderDetailsTests
         var noIp = TestOrder.Fields("100");
         noIp["buyer"] = JsonSerializer.SerializeToElement(new
         {
-            name = "Ada", surname = "Yilmaz", identityNumber = "11111111111", email = "ada@example.com", gsmNumber = "+905350000000",
-            city = "Istanbul", country = "Turkey", zipCode = "34000",
+            name = "Ada",
+            surname = "Yilmaz",
+            identityNumber = "11111111111",
+            email = "ada@example.com",
+            gsmNumber = "+905350000000",
+            city = "Istanbul",
+            country = "Turkey",
+            zipCode = "34000",
         });
         Assert.Equal(new[] { "buyer.ip" }, OrderDetails.MissingFields(noIp));
         Assert.Empty(OrderDetails.MissingFields(noIp, checkoutIntent: true));
@@ -131,8 +150,12 @@ public class OrderDetailsTests
         }
         var split = Assert.Throws<LunixiConfigurationException>(() => new SplitPaymentRequest(new
         {
-            totalAmount = "100", currency = "TRY", ownerRef = "owner", legs = new[] { new { cardToken = "card-1", amount = "100" } },
-            buyer = TestOrder.Buyer, basketItems = TestOrder.BasketJson("100"),
+            totalAmount = "100",
+            currency = "TRY",
+            ownerRef = "owner",
+            legs = new[] { new { cardToken = "card-1", amount = "100" } },
+            buyer = TestOrder.Buyer,
+            basketItems = TestOrder.BasketJson("100"),
         }));
         Assert.Equal("A split payment requires the order details: billingAddress.", split.Message);
     }
@@ -148,7 +171,9 @@ public class OrderDetailsTests
             var request = TestOrder.Intent("100", "TRY", "ORDER-1");
             await client.Payments.CreateIntentAsync(new CreateIntentRequest("100", "TRY", "ORDER-1")
             {
-                Buyer = JsonSerializer.SerializeToElement(buyer), BillingAddress = request.BillingAddress, BasketItems = request.BasketItems,
+                Buyer = JsonSerializer.SerializeToElement(buyer),
+                BillingAddress = request.BillingAddress,
+                BasketItems = request.BasketItems,
             }, "checkout:attempt-1");
             var sent = JsonDocument.Parse(Assert.Single(requests).Body!).RootElement;
             Assert.False(sent.GetProperty("buyer").TryGetProperty("ip", out _));
@@ -165,11 +190,16 @@ public class OrderDetailsTests
         {
             await client.Wallet.Topups.StartCardAsync(new
             {
-                creditWalletAccountId = "wa-1", amount = "100", currency = "TRY", buyer = TestOrder.Buyer, billingAddress = TestOrder.Address,
+                creditWalletAccountId = "wa-1",
+                amount = "100",
+                currency = "TRY",
+                buyer = TestOrder.Buyer,
+                billingAddress = TestOrder.Address,
             }, "topup:attempt-0001");
             await client.Payments.StoreCardAsync(new StoreCardRequest(new { cardHolderName = "Ada Yilmaz" }, "user-1", new Uri("https://shop.example/cards/return"))
             {
-                Buyer = TestOrder.Buyer, BillingAddress = TestOrder.Address,
+                Buyer = TestOrder.Buyer,
+                BillingAddress = TestOrder.Address,
             }, "store-card:user-1:0001");
             Assert.Equal(2, requests.Count);
             foreach (var request in requests)
@@ -187,8 +217,14 @@ public class OrderDetailsTests
         Assert.Equal(new[] { "buyer", "billingAddress", "shippingAddress", "basketItems" }, SplitPaymentFields.Payment.Skip(7));
         var split = new SplitPaymentRequest(new
         {
-            totalAmount = "100", currency = "TRY", ownerRef = "owner", legs = new[] { new { cardToken = "card-1", amount = "100" } },
-            buyer = TestOrder.Buyer, billingAddress = TestOrder.Address, shippingAddress = TestOrder.Address, basketItems = TestOrder.BasketJson("100"),
+            totalAmount = "100",
+            currency = "TRY",
+            ownerRef = "owner",
+            legs = new[] { new { cardToken = "card-1", amount = "100" } },
+            buyer = TestOrder.Buyer,
+            billingAddress = TestOrder.Address,
+            shippingAddress = TestOrder.Address,
+            basketItems = TestOrder.BasketJson("100"),
         });
         Assert.Equal("Ada", split.Payload.GetProperty("buyer").GetProperty("name").GetString());
     }

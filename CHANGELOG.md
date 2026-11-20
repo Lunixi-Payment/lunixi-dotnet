@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.1 — 2026-11-20
+
+- The 2.0.0 release did not reach NuGet; this version carries the same changes. Test sources follow `dotnet format`.
+
 ## 2.0.0 — 2026-11-20
 
 - **Breaking — order details required.** Every payment endpoint requires `buyer` (name, surname, identityNumber, email, gsmNumber, city, country, zipCode, ip), `billingAddress` (contactName, address, city, country, zipCode) and at least one `basketItems` entry (id, name, category1, itemType, price); a `PHYSICAL` item also requires `shippingAddress` (payment providers do not start a payment without them). `CreateIntentAsync`, `CreateMarketplaceIntentAsync`, `DirectMethodPaymentAsync` (typed and raw), `SplitPaymentRequest`, `MarketplaceClient.CreateCheckoutIntentAsync` and the marketplace card charges throw `LunixiConfigurationException` naming the missing paths (`buyer.email`, `basketItems.0.category1`, `shippingAddress` …) before sending; on the checkout intents `buyer.ip` may be left out (the Lunixi form takes it from the browser). Card storage (`StoreCardAsync`, `POST /payments/cards`) requires the buyer and billing address: `StoreCardRequest` gains `Buyer` and `BillingAddress`.

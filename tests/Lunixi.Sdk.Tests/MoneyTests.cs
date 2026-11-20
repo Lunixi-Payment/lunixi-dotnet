@@ -90,8 +90,16 @@ public class MoneyTests
         var responseBody = "{\"code\":\"AWAITING_ACTION\",\"data\":{\"splitPaymentId\":\"split-1\",\"totalAmount\":1}}";
         using var client = new LunixiClient(TestOptions.Create(), new FakeHandler((request, _) => Task.FromResult(
             request.RequestUri!.AbsolutePath.EndsWith("/auth/token") ? FakeHandler.Json("{\"access_token\":\"token\"}") : FakeHandler.Json(responseBody, System.Net.HttpStatusCode.BadRequest))));
-        var split = new SplitPaymentRequest(new { totalAmount = "1", currency = "TRY", ownerRef = "owner", legs = new[] { new { cardToken = "card-1", amount = "1" } },
-            buyer = TestOrder.Buyer, billingAddress = TestOrder.Address, basketItems = TestOrder.BasketJson("1") });
+        var split = new SplitPaymentRequest(new
+        {
+            totalAmount = "1",
+            currency = "TRY",
+            ownerRef = "owner",
+            legs = new[] { new { cardToken = "card-1", amount = "1" } },
+            buyer = TestOrder.Buyer,
+            billingAddress = TestOrder.Address,
+            basketItems = TestOrder.BasketJson("1")
+        });
         await Assert.ThrowsAsync<LunixiTransportException>(() => client.Payments.CreateSplitAsync(split, "split:numeric-response"));
         responseBody = "{\"code\":\"AWAITING_ACTION\",\"data\":{\"splitPaymentId\":\"split-1\",\"totalAmount\":\"1\"}}";
         Assert.Equal("1", (await client.Payments.CreateSplitAsync(split, "split:string-response")).Data.GetProperty("totalAmount").GetString());

@@ -95,7 +95,9 @@ public class CardAndMarketplaceTests
         {
             var store = new StoreCardRequest(Card, "user-1", new Uri("https://shop.example/cards/return"))
             {
-                Currency = "try", Buyer = TestOrder.Buyer, BillingAddress = TestOrder.Address,
+                Currency = "try",
+                Buyer = TestOrder.Buyer,
+                BillingAddress = TestOrder.Address,
             };
             Assert.DoesNotContain("4543871234567890", store.ToString());
             await Assert.ThrowsAsync<LunixiConfigurationException>(() => client.Payments.StoreCardAsync(store, null!));
